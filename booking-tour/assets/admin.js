@@ -17,6 +17,7 @@ jQuery(document).ready(function($) {
         const category = $('#bt-type-bookings-body').data('category');
         loadTypeBookings(typeId);
         if (category === 'hall' || category === 'staircase') loadSlots(typeId);
+        if (category === 'hall') loadAddons(typeId);
     }
 
     // Load holiday calendar
@@ -113,6 +114,80 @@ jQuery(document).ready(function($) {
         });
     });
 
+    // Add add-on
+    $('#bt-add-addon').on('click', function() {
+        const typeId = $(this).data('type-id');
+        const name = $('#bt-addon-name').val().trim();
+        const price = $('#bt-addon-price').val();
+        const maxQty = $('#bt-addon-max').val();
+        if (!name) {
+            showMessage('Please enter add-on name', 'error');
+            return;
+        }
+        $.post(btAdmin.ajaxUrl, {
+            action: 'bt_save_addon',
+            nonce: btAdmin.nonce,
+            type_id: typeId,
+            name: name,
+            price: price || 0,
+            max_quantity: maxQty || 0
+        }, function(response) {
+            if (response.success) {
+                showMessage('Add-on saved', 'success');
+                $('#bt-addon-name, #bt-addon-price, #bt-addon-max').val('');
+                loadAddons(typeId);
+            } else {
+                showMessage(response.data || 'Error saving add-on', 'error');
+            }
+        });
+    });
+
+    $(document).on('click', '.bt-edit-addon', function() {
+        const addonId = $(this).data('id');
+        const $row = $(this).closest('tr');
+        const name = $row.find('[data-field="name"]').text().trim();
+        const price = $row.find('[data-field="price"]').data('value');
+        const maxQty = $row.find('[data-field="max"]').data('value');
+        const newName = prompt('Edit add-on name', name);
+        if (newName === null) return;
+        const newPrice = prompt('Edit price', price);
+        if (newPrice === null) return;
+        const newMax = prompt('Edit max quantity', maxQty);
+        if (newMax === null) return;
+        $.post(btAdmin.ajaxUrl, {
+            action: 'bt_update_addon',
+            nonce: btAdmin.nonce,
+            addon_id: addonId,
+            name: newName.trim(),
+            price: newPrice,
+            max_quantity: newMax
+        }, function(response) {
+            if (response.success) {
+                showMessage('Add-on updated', 'success');
+                const typeId = $('#bt-addons-body').data('type-id');
+                loadAddons(typeId);
+            } else {
+                showMessage(response.data || 'Error updating add-on', 'error');
+            }
+        });
+    });
+
+    $(document).on('click', '.bt-delete-addon', function() {
+        const addonId = $(this).data('id');
+        if (!confirm('Delete this add-on?')) return;
+        $.post(btAdmin.ajaxUrl, {
+            action: 'bt_delete_addon',
+            nonce: btAdmin.nonce,
+            addon_id: addonId
+        }, function(response) {
+            if (response.success) {
+                showMessage('Add-on deleted', 'success');
+                const typeId = $('#bt-addons-body').data('type-id');
+                loadAddons(typeId);
+            }
+        });
+    });
+
     // Delete slot
     $(document).on('click', '.bt-delete-slot', function(e) {
         e.stopPropagation();
@@ -150,6 +225,16 @@ jQuery(document).ready(function($) {
         });
     }
 
+    function loadAddons(typeId) {
+        $.post(btAdmin.ajaxUrl, {
+            action: 'bt_get_addons',
+            nonce: btAdmin.nonce,
+            type_id: typeId
+        }, function(response) {
+            if (response.success) renderAddons(response.data);
+        });
+    }
+
     function renderSlots(slots) {
         let html = '';
         if (slots.length === 0) {
@@ -165,6 +250,26 @@ jQuery(document).ready(function($) {
             });
         }
         $('#bt-slots-body').html(html);
+    }
+
+    function renderAddons(addons) {
+        let html = '';
+        if (!addons.length) {
+            html = '<tr><td colspan="4" class="bt-empty">No add-ons created yet</td></tr>';
+        } else {
+            addons.forEach(function(addon) {
+                html += '<tr>';
+                html += '<td data-field="name">' + escapeHtml(addon.name) + '</td>';
+                html += '<td data-field="price" data-value="' + addon.price + '">BDT ' + parseFloat(addon.price).toFixed(2) + '</td>';
+                html += '<td data-field="max" data-value="' + addon.max_quantity + '">' + addon.max_quantity + '</td>';
+                html += '<td>';
+                html += '<button class="bt-btn bt-edit-addon" data-id="' + addon.id + '">Edit</button> ';
+                html += '<button class="bt-btn bt-btn-delete bt-delete-addon" data-id="' + addon.id + '">Delete</button>';
+                html += '</td>';
+                html += '</tr>';
+            });
+        }
+        $('#bt-addons-body').html(html);
     }
 
     function loadBookings() {
@@ -272,8 +377,24 @@ jQuery(document).ready(function($) {
         html += '<div class="bt-detail-section"><h4>Booking Details</h4>';
         html += '<div class="bt-detail-row"><span>Type:</span><strong>' + escapeHtml(booking.type_name || 'N/A') + '</strong></div>';
         html += '<div class="bt-detail-row"><span>Date:</span><strong>' + formatDateLong(booking.booking_date) + '</strong></div>';
+        if ((booking.type_category === 'hall' || booking.type_category === 'staircase') && booking.slot_details && booking.slot_details.length) {
+            const slotLines = booking.slot_details.map(function(slot) {
+                return escapeHtml(slot.slot_name) + ' (' + formatTime(slot.start_time) + ' - ' + formatTime(slot.end_time) + ')';
+            });
+            html += '<div class="bt-detail-row"><span>Slots:</span><strong>' + slotLines.join(', ') + '</strong></div>';
+            if (typeof booking.slot_total !== 'undefined') {
+                html += '<div class="bt-detail-row"><span>Slots Total:</span><strong>BDT ' + parseFloat(booking.slot_total).toFixed(2) + '</strong></div>';
+            }
+        }
         if (booking.type_category === 'individual_tour') {
             html += '<div class="bt-detail-row"><span>Tickets:</span><strong>' + booking.ticket_count + ' person(s)</strong></div>';
+        }
+        if (booking.type_category === 'hall' && booking.addon_details && booking.addon_details.length) {
+            html += '<div class="bt-detail-row"><span>Add-ons:</span><strong></strong></div>';
+            booking.addon_details.forEach(function(addon) {
+                html += '<div class="bt-detail-row"><span>' + escapeHtml(addon.name) + ' × ' + addon.quantity + '</span><strong>BDT ' + parseFloat(addon.line_total).toFixed(2) + ' <span class="bt-text-muted">(BDT ' + parseFloat(addon.price).toFixed(2) + ')</span></strong></div>';
+            });
+            html += '<div class="bt-detail-row"><span>Add-ons Subtotal:</span><strong>BDT ' + parseFloat(booking.addons_subtotal || 0).toFixed(2) + '</strong></div>';
         }
         html += '<div class="bt-detail-row"><span>Total:</span><strong class="bt-price-lg">BDT ' + parseFloat(booking.total_price).toFixed(2) + '</strong></div>';
         html += '</div>';

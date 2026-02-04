@@ -19,6 +19,9 @@ jQuery(document).ready(function($) {
     let ticketsByDate = {};
     let eventBlockedDates = [];
     let individualBlockedDates = [];
+    let addons = [];
+    let addonsAvailability = {};
+    let selectedAddons = {};
     let serverTime = btFrontend.serverTime || '00:00';
     let serverDate = btFrontend.serverDate || '';
     let sharedTourStartTime = '';
@@ -45,9 +48,36 @@ jQuery(document).ready(function($) {
         selectedDate = null;
         selectedSlots = [];
         ticketCount = 1;
+        selectedAddons = {};
         toggleSections();
         updateUI();
         loadTypeData(typeId);
+    });
+
+    // Add-ons controls
+    $('#bt-addons-list').on('click', '.bt-addon-plus', function() {
+        const $item = $(this).closest('.bt-addon-item');
+        const addonId = $item.data('addon-id');
+        const remaining = getAddonRemaining(addonId);
+        const current = parseInt(selectedAddons[addonId]) || 0;
+        if (current < remaining) {
+            selectedAddons[addonId] = current + 1;
+            renderAddonsPanel();
+            updateUI();
+        } else {
+            showToast('No more stock available for this add-on', 'error');
+        }
+    });
+    $('#bt-addons-list').on('click', '.bt-addon-minus', function() {
+        const $item = $(this).closest('.bt-addon-item');
+        const addonId = $item.data('addon-id');
+        const current = parseInt(selectedAddons[addonId]) || 0;
+        if (current > 0) {
+            selectedAddons[addonId] = current - 1;
+            if (selectedAddons[addonId] <= 0) delete selectedAddons[addonId];
+            renderAddonsPanel();
+            updateUI();
+        }
     });
 
     // Calendar navigation
@@ -105,6 +135,7 @@ jQuery(document).ready(function($) {
         formData.append('slot_ids', selectedSlots.join(','));
         formData.append('ticket_count', ticketCount);
         formData.append('total_price', $('#bt-total-price').val());
+        formData.append('addons', $('#bt-selected-addons').val());
         formData.append('customer_name', name);
         formData.append('customer_email', email);
         formData.append('customer_phone', phone);
@@ -164,6 +195,7 @@ jQuery(document).ready(function($) {
                     ticketsByDate = response.data.ticketsByDate || {};
                     eventBlockedDates = response.data.eventBlockedDates || [];
                     individualBlockedDates = response.data.individualBlockedDates || [];
+                    addons = response.data.addons || [];
                     serverTime = response.data.serverTime || '00:00';
                     serverDate = response.data.serverDate || '';
                     sharedTourStartTime = response.data.sharedTourStartTime || '';
@@ -238,6 +270,14 @@ jQuery(document).ready(function($) {
                             if (selectedSlots.length < newBooked.length) {
                                 showToast('Some slots were just booked', 'error');
                             }
+                        }
+                    }
+                    if (typeData.type_category === 'hall') {
+                        const newAddonsAvailability = response.data.addonsAvailability || {};
+                        if (JSON.stringify(newAddonsAvailability) !== JSON.stringify(addonsAvailability)) {
+                            addonsAvailability = newAddonsAvailability;
+                            hasChanges = true;
+                            clampSelectedAddons();
                         }
                     }
                 } else if (typeData.type_category === 'individual_tour') {
@@ -329,11 +369,6 @@ jQuery(document).ready(function($) {
             html += '<div class="bt-day bt-day-empty"></div>';
         }
 
-        // Parse server time for time-based availability check (tours)
-        const serverTimeParts = serverTime.split(':');
-        const serverHour = parseInt(serverTimeParts[0]) || 0;
-        const serverMinute = parseInt(serverTimeParts[1]) || 0;
-        const serverTimeMinutes = serverHour * 60 + serverMinute;
         const localNow = new Date();
         const localTimeMinutes = localNow.getHours() * 60 + localNow.getMinutes();
 
@@ -380,7 +415,7 @@ jQuery(document).ready(function($) {
                 const tourStartMinutes = parseInt(startParts[0]) * 60 + parseInt(startParts[1] || 0);
 
                 // If current time has reached tour start time, mark as unavailable
-                if (serverTimeMinutes >= tourStartMinutes) {
+                if (localTimeMinutes >= tourStartMinutes) {
                     isTimePassed = true;
                 }
             }
@@ -414,6 +449,7 @@ jQuery(document).ready(function($) {
             selectedDate = new Date($(this).data('date') + 'T00:00:00');
             selectedSlots = [];
             ticketCount = 1;
+            selectedAddons = {};
             
             if (isHallCategory(typeData.type_category)) renderSlots();
             else renderTourInfo();
@@ -533,18 +569,16 @@ jQuery(document).ready(function($) {
         
         // Check if tour time has passed for today
         let isTimePassed = false;
-        const isToday = dateStr === serverDate;
+        const localNow = new Date();
+        const isToday = dateStr === formatDate(localNow);
         if (isToday && typeData) {
-            const serverTimeParts = serverTime.split(':');
-            const serverHour = parseInt(serverTimeParts[0]) || 0;
-            const serverMinute = parseInt(serverTimeParts[1]) || 0;
-            const serverTimeMinutes = serverHour * 60 + serverMinute;
+            const localTimeMinutes = localNow.getHours() * 60 + localNow.getMinutes();
             
             const tourStartTime = getSharedTourStartTime() || typeData.tour_start_time || '00:00';
             const startParts = tourStartTime.split(':');
             const tourStartMinutes = parseInt(startParts[0]) * 60 + parseInt(startParts[1] || 0);
             
-            if (serverTimeMinutes >= tourStartMinutes) {
+            if (localTimeMinutes >= tourStartMinutes) {
                 isTimePassed = true;
             }
         }
@@ -639,6 +673,7 @@ jQuery(document).ready(function($) {
         const category = $('#bt-type-category').val();
         let showSummary = false;
         let totalPrice = 0;
+        let addonsTotal = 0;
         
         if (isHallCategory(category) && selectedDate && selectedSlots.length > 0) {
             showSummary = true;
@@ -652,7 +687,13 @@ jQuery(document).ready(function($) {
                 }
             });
             
+            const addonsHtml = (category === 'hall') ? renderAddonsSummary() : '';
             $('#bt-summary-content').html('<div class="bt-summary-date">' + formatDateLong(selectedDate) + '</div><div class="bt-summary-slots">' + slotsHtml + '</div>');
+            $('#bt-summary-addons').html(addonsHtml);
+            if (category === 'hall') {
+                addonsTotal = calculateAddonsTotal();
+                totalPrice += addonsTotal;
+            }
         } else if ((category === 'event_tour' || category === 'individual_tour') && selectedDate) {
             showSummary = true;
             
@@ -671,18 +712,22 @@ jQuery(document).ready(function($) {
             $('#bt-ticket-count').val(ticketCount);
             $('#bt-selected-date').val(formatDate(selectedDate));
             $('#bt-selected-slots').val(selectedSlots.join(','));
+            $('#bt-selected-addons').val(JSON.stringify(selectedAddons));
             $('#bt-summary').slideDown(300);
             $('#bt-form-section').slideDown(300);
         } else {
             $('#bt-summary').slideUp(200);
             $('#bt-form-section').slideUp(200);
         }
+
+        toggleAddonsSection();
     }
 
     function resetForm() {
         selectedDate = null;
         selectedSlots = [];
         ticketCount = 1;
+        selectedAddons = {};
         $('#bt-booking-form')[0].reset();
         $('.bt-file-label span').text('Choose file (max 1MB)');
         toggleSections();
@@ -698,6 +743,97 @@ jQuery(document).ready(function($) {
         const showHall = isHallCategory(category);
         $('.bt-slots-section').toggle(showHall);
         $('.bt-tour-info-section').toggle(!showHall);
+    }
+
+    function toggleAddonsSection() {
+        const category = $('#bt-type-category').val();
+        const showAddons = category === 'hall' && selectedDate && selectedSlots.length > 0 && addons.length > 0;
+        $('#bt-addons-section').toggle(showAddons);
+        if (showAddons) renderAddonsPanel();
+    }
+
+    function calculateAddonsTotal() {
+        let total = 0;
+        Object.keys(selectedAddons).forEach(function(addonId) {
+            const qty = parseInt(selectedAddons[addonId]) || 0;
+            if (qty <= 0) return;
+            const addon = addons.find(a => parseInt(a.id) === parseInt(addonId));
+            if (addon) {
+                total += parseFloat(addon.price) * qty;
+            }
+        });
+        return total;
+    }
+
+    function renderAddonsSummary() {
+        if (!Object.keys(selectedAddons).length) return '';
+        let html = '';
+        Object.keys(selectedAddons).forEach(function(addonId) {
+            const qty = parseInt(selectedAddons[addonId]) || 0;
+            if (qty <= 0) return;
+            const addon = addons.find(a => parseInt(a.id) === parseInt(addonId));
+            if (!addon) return;
+            const lineTotal = parseFloat(addon.price) * qty;
+            html += '<div class="bt-addon-line"><span>' + escapeHtml(addon.name) + ' × ' + qty + '</span><span>BDT ' + lineTotal.toFixed(2) + '</span></div>';
+        });
+        if (!html) return '';
+        html += '<div class="bt-addon-line"><span>Add-ons Total</span><span>BDT ' + calculateAddonsTotal().toFixed(2) + '</span></div>';
+        return html;
+    }
+
+    function clampSelectedAddons() {
+        let changed = false;
+        Object.keys(selectedAddons).forEach(function(addonId) {
+            const qty = parseInt(selectedAddons[addonId]) || 0;
+            const remaining = getAddonRemaining(addonId);
+            if (qty > remaining) {
+                selectedAddons[addonId] = Math.max(0, remaining);
+                changed = true;
+            }
+        });
+        if (changed) {
+            updateUI();
+        }
+    }
+
+    function getAddonRemaining(addonId) {
+        if (typeof addonsAvailability[addonId] !== 'undefined') {
+            return parseInt(addonsAvailability[addonId]) || 0;
+        }
+        const addon = addons.find(a => parseInt(a.id) === parseInt(addonId));
+        return addon ? parseInt(addon.max_quantity) || 0 : 0;
+    }
+
+    function getAddonRemainingForUser(addonId) {
+        const remaining = getAddonRemaining(addonId);
+        const selectedQty = parseInt(selectedAddons[addonId]) || 0;
+        return Math.max(0, remaining - selectedQty);
+    }
+
+    function renderAddonsPanel() {
+        if (!addons.length) {
+            $('#bt-addons-list').html('<p class="bt-text-muted">No add-ons available.</p>');
+            return;
+        }
+        let html = '';
+        addons.forEach(function(addon) {
+            const remaining = getAddonRemaining(addon.id);
+            const remainingForUser = getAddonRemainingForUser(addon.id);
+            const selectedQty = parseInt(selectedAddons[addon.id]) || 0;
+            const disabled = remaining === 0 && selectedQty === 0;
+            html += '<div class="bt-addon-item' + (disabled ? ' bt-addon-disabled' : '') + '" data-addon-id="' + addon.id + '">';
+            html += '<div class="bt-addon-info">';
+            html += '<div class="bt-addon-name">' + escapeHtml(addon.name) + '</div>';
+            html += '<div class="bt-addon-meta">BDT ' + parseFloat(addon.price).toFixed(2) + ' · Available: ' + remainingForUser + '</div>';
+            html += '</div>';
+            html += '<div class="bt-addon-controls">';
+            html += '<button type="button" class="bt-addon-btn bt-addon-minus">−</button>';
+            html += '<span class="bt-addon-qty">' + selectedQty + '</span>';
+            html += '<button type="button" class="bt-addon-btn bt-addon-plus">+</button>';
+            html += '</div>';
+            html += '</div>';
+        });
+        $('#bt-addons-list').html(html);
     }
 
     // File upload label

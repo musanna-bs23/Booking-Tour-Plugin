@@ -19,6 +19,7 @@ class BookingTour {
     public function __construct() {
         register_activation_hook(__FILE__, array($this, 'activate'));
         $this->ensure_staircase_type();
+        $this->ensure_addons_tables();
         add_action('admin_menu', array($this, 'add_admin_menu'));
         add_action('admin_enqueue_scripts', array($this, 'admin_scripts'));
         add_action('wp_enqueue_scripts', array($this, 'frontend_scripts'));
@@ -55,6 +56,12 @@ class BookingTour {
         // Individual tour capacity
         add_action('wp_ajax_bt_get_remaining_capacity', array($this, 'get_remaining_capacity'));
         add_action('wp_ajax_nopriv_bt_get_remaining_capacity', array($this, 'get_remaining_capacity'));
+
+        // Add-ons management
+        add_action('wp_ajax_bt_get_addons', array($this, 'get_addons'));
+        add_action('wp_ajax_bt_save_addon', array($this, 'save_addon'));
+        add_action('wp_ajax_bt_update_addon', array($this, 'update_addon'));
+        add_action('wp_ajax_bt_delete_addon', array($this, 'delete_addon'));
     }
 
     public function activate() {
@@ -65,6 +72,7 @@ class BookingTour {
         if (!file_exists($bt_dir)) {
             wp_mkdir_p($bt_dir);
         }
+        $this->ensure_addons_tables();
     }
 
     private function ensure_staircase_type() {
@@ -88,6 +96,42 @@ class BookingTour {
             ),
             array('%s', '%s', '%s', '%s')
         );
+    }
+
+    private function ensure_addons_tables() {
+        global $wpdb;
+        require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+        $charset_collate = $wpdb->get_charset_collate();
+        $addons_table = $wpdb->prefix . 'bt_addons';
+        $booking_addons_table = $wpdb->prefix . 'bt_booking_addons';
+
+        $sql1 = "CREATE TABLE {$addons_table} (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            booking_type_id BIGINT UNSIGNED NOT NULL,
+            name VARCHAR(191) NOT NULL,
+            price DECIMAL(10,2) NOT NULL DEFAULT 0,
+            max_quantity INT NOT NULL DEFAULT 0,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            KEY booking_type_id (booking_type_id)
+        ) {$charset_collate};";
+
+        $sql2 = "CREATE TABLE {$booking_addons_table} (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            booking_id BIGINT UNSIGNED NOT NULL,
+            addon_id BIGINT UNSIGNED NOT NULL,
+            addon_name VARCHAR(191) NOT NULL,
+            addon_price DECIMAL(10,2) NOT NULL DEFAULT 0,
+            quantity INT NOT NULL DEFAULT 0,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            KEY booking_id (booking_id),
+            KEY addon_id (addon_id)
+        ) {$charset_collate};";
+
+        dbDelta($sql1);
+        dbDelta($sql2);
     }
 
     public function add_admin_menu() {
@@ -431,19 +475,67 @@ class BookingTour {
                     </button>
                 </div>
                 
-                <table class="bt-slots-table">
-                    <thead>
-                        <tr>
-                            <th>Slot Name</th>
-                            <th>Time</th>
-                            <th>Price</th>
-                            <th width="100">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody id="bt-slots-body" data-type-id="<?php echo esc_attr($type->id); ?>">
-                    </tbody>
-                </table>
+            <table class="bt-slots-table">
+                <thead>
+                    <tr>
+                        <th>Slot Name</th>
+                        <th>Time</th>
+                        <th>Price</th>
+                        <th width="100">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="bt-slots-body" data-type-id="<?php echo esc_attr($type->id); ?>">
+                </tbody>
+            </table>
+        </div>
+
+        <?php if ($type->type_category === 'hall'): ?>
+        <!-- Add-ons Management -->
+        <div class="bt-settings-card">
+            <h2>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                    <path d="M20 12H4"></path>
+                    <path d="M14 6h6v6"></path>
+                    <path d="M10 18H4v-6"></path>
+                </svg>
+                Add-ons Management
+            </h2>
+            <p class="bt-hint">Create add-ons users can select with their Hall booking.</p>
+
+            <div class="bt-input-row bt-addons-row-admin">
+                <div class="bt-input-group">
+                    <label>Add-on Name</label>
+                    <input type="text" id="bt-addon-name" placeholder="e.g., Microphone">
+                </div>
+                <div class="bt-input-group">
+                    <label>Price (BDT)</label>
+                    <input type="number" id="bt-addon-price" placeholder="0.00" min="0" step="0.01">
+                </div>
+                <div class="bt-input-group">
+                    <label>Max Quantity</label>
+                    <input type="number" id="bt-addon-max" placeholder="0" min="0" step="1">
+                </div>
+                <div class="bt-input-group">
+                    <label>&nbsp;</label>
+                    <button class="button button-primary bt-add-addon-btn" id="bt-add-addon" data-type-id="<?php echo esc_attr($type->id); ?>">
+                        Add Add-on
+                    </button>
+                </div>
             </div>
+
+            <table class="bt-slots-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Price</th>
+                        <th>Max Qty</th>
+                        <th width="120">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="bt-addons-body" data-type-id="<?php echo esc_attr($type->id); ?>"></tbody>
+            </table>
+        </div>
+        <?php endif; ?>
             
             <?php elseif ($type->type_category === 'event_tour'): ?>
             <!-- Event Tour Settings -->
@@ -795,6 +887,80 @@ class BookingTour {
         wp_send_json_success('Settings saved successfully');
     }
 
+    public function get_addons() {
+        check_ajax_referer('bt_admin_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Unauthorized');
+        }
+        global $wpdb;
+        $type_id = intval($_POST['type_id']);
+        $addons = $wpdb->get_results($wpdb->prepare(
+            "SELECT * FROM {$wpdb->prefix}bt_addons WHERE booking_type_id = %d ORDER BY id DESC",
+            $type_id
+        ));
+        wp_send_json_success($addons);
+    }
+
+    public function save_addon() {
+        check_ajax_referer('bt_admin_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Unauthorized');
+        }
+        global $wpdb;
+        $type_id = intval($_POST['type_id']);
+        $name = sanitize_text_field($_POST['name']);
+        $price = floatval($_POST['price']);
+        $max_quantity = intval($_POST['max_quantity']);
+        if (empty($name)) {
+            wp_send_json_error('Name is required');
+        }
+        $wpdb->insert(
+            $wpdb->prefix . 'bt_addons',
+            array(
+                'booking_type_id' => $type_id,
+                'name' => $name,
+                'price' => $price,
+                'max_quantity' => $max_quantity
+            ),
+            array('%d', '%s', '%f', '%d')
+        );
+        wp_send_json_success('Add-on saved');
+    }
+
+    public function update_addon() {
+        check_ajax_referer('bt_admin_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Unauthorized');
+        }
+        global $wpdb;
+        $addon_id = intval($_POST['addon_id']);
+        $name = sanitize_text_field($_POST['name']);
+        $price = floatval($_POST['price']);
+        $max_quantity = intval($_POST['max_quantity']);
+        if (empty($name)) {
+            wp_send_json_error('Name is required');
+        }
+        $wpdb->update(
+            $wpdb->prefix . 'bt_addons',
+            array('name' => $name, 'price' => $price, 'max_quantity' => $max_quantity),
+            array('id' => $addon_id),
+            array('%s', '%f', '%d'),
+            array('%d')
+        );
+        wp_send_json_success('Add-on updated');
+    }
+
+    public function delete_addon() {
+        check_ajax_referer('bt_admin_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Unauthorized');
+        }
+        global $wpdb;
+        $addon_id = intval($_POST['addon_id']);
+        $wpdb->delete($wpdb->prefix . 'bt_addons', array('id' => $addon_id), array('%d'));
+        wp_send_json_success('Add-on deleted');
+    }
+
     public function get_booking_data() {
         global $wpdb;
         $type_id = intval($_POST['type_id']);
@@ -813,6 +979,13 @@ class BookingTour {
         if ($type && ($type->type_category === 'hall' || $type->type_category === 'staircase')) {
             $slots = $wpdb->get_results($wpdb->prepare(
                 "SELECT * FROM {$wpdb->prefix}bt_slots WHERE booking_type_id = %d ORDER BY start_time",
+                $type_id
+            ));
+        }
+        $addons = array();
+        if ($type && $type->type_category === 'hall') {
+            $addons = $wpdb->get_results($wpdb->prepare(
+                "SELECT * FROM {$wpdb->prefix}bt_addons WHERE booking_type_id = %d ORDER BY id ASC",
                 $type_id
             ));
         }
@@ -904,6 +1077,7 @@ class BookingTour {
         wp_send_json_success(array(
             'type' => $type,
             'slots' => $slots,
+            'addons' => $addons,
             'holidays' => $holidays,
             'bookedSlots' => $bookedSlots,
             'bookedDates' => $bookedDates,
@@ -936,6 +1110,7 @@ class BookingTour {
 
         $bookedSlots = array();
         $totalTickets = 0;
+        $addonsAvailability = array();
         
         foreach ($bookings as $booking) {
             if (($type->type_category === 'hall' || $type->type_category === 'staircase') && $booking->slot_ids) {
@@ -943,6 +1118,35 @@ class BookingTour {
                 $bookedSlots = array_merge($bookedSlots, $slot_ids);
             }
             $totalTickets += intval($booking->ticket_count);
+        }
+
+        if ($type && $type->type_category === 'hall' && !empty($date)) {
+            $addons = $wpdb->get_results($wpdb->prepare(
+                "SELECT id, max_quantity FROM {$wpdb->prefix}bt_addons WHERE booking_type_id = %d",
+                $type_id
+            ));
+            if ($addons) {
+                $addon_ids = array_map(function($a) { return intval($a->id); }, $addons);
+                $placeholders = implode(',', array_fill(0, count($addon_ids), '%d'));
+                $used_rows = $wpdb->get_results($wpdb->prepare(
+                    "SELECT ba.addon_id, SUM(ba.quantity) AS total_qty
+                     FROM {$wpdb->prefix}bt_booking_addons ba
+                     INNER JOIN {$wpdb->prefix}bt_bookings b ON b.id = ba.booking_id
+                     WHERE b.booking_type_id = %d AND b.booking_date = %s AND b.status IN ('pending','approved')
+                     AND ba.addon_id IN ($placeholders)
+                     GROUP BY ba.addon_id",
+                    array_merge(array($type_id, $date), $addon_ids)
+                ));
+                $used_map = array();
+                foreach ($used_rows as $row) {
+                    $used_map[intval($row->addon_id)] = intval($row->total_qty);
+                }
+                foreach ($addons as $addon) {
+                    $used = isset($used_map[$addon->id]) ? $used_map[$addon->id] : 0;
+                    $remaining = max(0, intval($addon->max_quantity) - $used);
+                    $addonsAvailability[intval($addon->id)] = $remaining;
+                }
+            }
         }
         
         // Check cross-calendar blocking
@@ -1008,6 +1212,7 @@ class BookingTour {
             'bookedSlots' => array_values(array_unique($bookedSlots)),
             'totalTickets' => $totalTickets,
             'remainingCapacity' => $type->max_daily_capacity - $totalTickets,
+            'addonsAvailability' => $addonsAvailability,
             'dateBlockedByEvent' => $dateBlockedByEvent,
             'dateBlockedByIndividual' => $dateBlockedByIndividual,
             'eventBlockedDates' => $eventBlockedDates,
@@ -1051,6 +1256,7 @@ class BookingTour {
         $booking_date = sanitize_text_field($_POST['booking_date']);
         $slot_ids = isset($_POST['slot_ids']) ? sanitize_text_field($_POST['slot_ids']) : '';
         $ticket_count = isset($_POST['ticket_count']) ? intval($_POST['ticket_count']) : 1;
+        $addons_json = isset($_POST['addons']) ? wp_unslash($_POST['addons']) : '';
         $total_price = floatval($_POST['total_price']);
         $customer_name = sanitize_text_field($_POST['customer_name']);
         $customer_email = sanitize_email($_POST['customer_email']);
@@ -1139,6 +1345,59 @@ class BookingTour {
                     }
                 }
             }
+            if ($type->type_category === 'hall' && !empty($addons_json)) {
+                $addons_payload = json_decode($addons_json, true);
+                if (is_array($addons_payload) && !empty($addons_payload)) {
+                    $availability = $this->get_addons_availability($type_id, $booking_date);
+                    foreach ($addons_payload as $addon_id => $qty) {
+                        $addon_id = intval($addon_id);
+                        $qty = intval($qty);
+                        if ($qty <= 0) continue;
+                        $remaining = isset($availability[$addon_id]) ? intval($availability[$addon_id]) : 0;
+                        if ($qty > $remaining) {
+                            wp_send_json_error('Add-on availability changed. Please refresh and try again.');
+                        }
+                    }
+                }
+            }
+            // Recalculate total price for hall/staircase based on slots + add-ons snapshot
+            $slot_total = 0;
+            if (!empty($slot_ids)) {
+                $slot_id_arr = array_map('intval', explode(',', $slot_ids));
+                if (!empty($slot_id_arr)) {
+                    $slots = $wpdb->get_results(
+                        "SELECT price FROM {$wpdb->prefix}bt_slots WHERE id IN (" . implode(',', $slot_id_arr) . ")"
+                    );
+                    foreach ($slots as $slot) {
+                        $slot_total += floatval($slot->price);
+                    }
+                }
+            }
+            $addons_total = 0;
+            if ($type->type_category === 'hall' && !empty($addons_json)) {
+                $addons_payload = json_decode($addons_json, true);
+                if (is_array($addons_payload) && !empty($addons_payload)) {
+                    $addon_ids = array_map('intval', array_keys($addons_payload));
+                    if (!empty($addon_ids)) {
+                        $addon_rows = $wpdb->get_results(
+                            "SELECT id, price FROM {$wpdb->prefix}bt_addons WHERE booking_type_id = " . intval($type_id) .
+                            " AND id IN (" . implode(',', $addon_ids) . ")"
+                        );
+                        $price_map = array();
+                        foreach ($addon_rows as $row) {
+                            $price_map[intval($row->id)] = floatval($row->price);
+                        }
+                        foreach ($addons_payload as $addon_id => $qty) {
+                            $addon_id = intval($addon_id);
+                            $qty = intval($qty);
+                            if ($qty > 0 && isset($price_map[$addon_id])) {
+                                $addons_total += $price_map[$addon_id] * $qty;
+                            }
+                        }
+                    }
+                }
+            }
+            $total_price = $slot_total + $addons_total;
         } elseif ($type->type_category === 'event_tour') {
             // Check if date is available (not booked by individual tour)
             $individual_type = $wpdb->get_row("SELECT id FROM {$wpdb->prefix}bt_booking_types WHERE type_category = 'individual_tour'");
@@ -1208,6 +1467,20 @@ class BookingTour {
         );
 
         if ($wpdb->insert_id) {
+            if ($type->type_category === 'hall' && !empty($addons_json)) {
+                $addons_payload = json_decode($addons_json, true);
+                if (is_array($addons_payload)) {
+                    $error = $this->save_booking_addons($wpdb->insert_id, $type_id, $booking_date, $addons_payload);
+                    if ($error) {
+                        $wpdb->delete(
+                            $wpdb->prefix . 'bt_bookings',
+                            array('id' => $wpdb->insert_id),
+                            array('%d')
+                        );
+                        wp_send_json_error($error);
+                    }
+                }
+            }
             // Send notification email
             $this->send_booking_notification_email(
                 $customer_name, $customer_email, $customer_phone, 
@@ -1319,6 +1592,79 @@ class BookingTour {
         wp_mail($customer_email, $subject, $message, $headers);
     }
 
+    private function save_booking_addons($booking_id, $type_id, $booking_date, $addons_payload) {
+        global $wpdb;
+        if (empty($addons_payload)) return '';
+
+        $addon_ids = array_map('intval', array_keys($addons_payload));
+        if (empty($addon_ids)) return '';
+
+        $placeholders = implode(',', array_fill(0, count($addon_ids), '%d'));
+        $addons = $wpdb->get_results($wpdb->prepare(
+            "SELECT id, name, price, max_quantity FROM {$wpdb->prefix}bt_addons WHERE booking_type_id = %d AND id IN ($placeholders)",
+            array_merge(array($type_id), $addon_ids)
+        ));
+        $addon_map = array();
+        foreach ($addons as $addon) {
+            $addon_map[intval($addon->id)] = $addon;
+        }
+
+        foreach ($addons_payload as $addon_id => $qty) {
+            $addon_id = intval($addon_id);
+            $qty = intval($qty);
+            if ($qty <= 0 || !isset($addon_map[$addon_id])) continue;
+
+            $availability = $this->get_addons_availability($type_id, $booking_date);
+            $remaining = isset($availability[$addon_id]) ? intval($availability[$addon_id]) : 0;
+            if ($qty > $remaining) {
+                return 'Add-on availability changed. Please refresh and try again.';
+            }
+
+            $wpdb->insert(
+                $wpdb->prefix . 'bt_booking_addons',
+                array(
+                    'booking_id' => $booking_id,
+                    'addon_id' => $addon_id,
+                    'addon_name' => $addon_map[$addon_id]->name,
+                    'addon_price' => $addon_map[$addon_id]->price,
+                    'quantity' => $qty
+                ),
+                array('%d', '%d', '%s', '%f', '%d')
+            );
+        }
+        return '';
+    }
+
+    private function get_addons_availability($type_id, $booking_date) {
+        global $wpdb;
+        $addons = $wpdb->get_results($wpdb->prepare(
+            "SELECT id, max_quantity FROM {$wpdb->prefix}bt_addons WHERE booking_type_id = %d",
+            $type_id
+        ));
+        $availability = array();
+        if (!$addons) return $availability;
+        $addon_ids = array_map(function($a) { return intval($a->id); }, $addons);
+        $placeholders = implode(',', array_fill(0, count($addon_ids), '%d'));
+        $used_rows = $wpdb->get_results($wpdb->prepare(
+            "SELECT ba.addon_id, SUM(ba.quantity) AS total_qty
+             FROM {$wpdb->prefix}bt_booking_addons ba
+             INNER JOIN {$wpdb->prefix}bt_bookings b ON b.id = ba.booking_id
+             WHERE b.booking_type_id = %d AND b.booking_date = %s AND b.status IN ('pending','approved')
+             AND ba.addon_id IN ($placeholders)
+             GROUP BY ba.addon_id",
+            array_merge(array($type_id, $booking_date), $addon_ids)
+        ));
+        $used_map = array();
+        foreach ($used_rows as $row) {
+            $used_map[intval($row->addon_id)] = intval($row->total_qty);
+        }
+        foreach ($addons as $addon) {
+            $used = isset($used_map[$addon->id]) ? $used_map[$addon->id] : 0;
+            $availability[intval($addon->id)] = max(0, intval($addon->max_quantity) - $used);
+        }
+        return $availability;
+    }
+
     public function get_bookings() {
         check_ajax_referer('bt_admin_nonce', 'nonce');
         
@@ -1356,16 +1702,41 @@ class BookingTour {
         
         $bookings = $wpdb->get_results($wpdb->prepare($sql, $params));
         
-        // Get slot names for hall/staircase bookings
+        // Get slot names and add-ons for hall/staircase bookings
         foreach ($bookings as &$booking) {
             if (($booking->type_category === 'hall' || $booking->type_category === 'staircase') && $booking->slot_ids) {
                 $slot_ids = array_map('intval', explode(',', $booking->slot_ids));
                 if (!empty($slot_ids)) {
                     $slots = $wpdb->get_results(
-                        "SELECT slot_name, start_time, end_time FROM {$wpdb->prefix}bt_slots WHERE id IN (" . implode(',', $slot_ids) . ")"
+                        "SELECT slot_name, start_time, end_time, price FROM {$wpdb->prefix}bt_slots WHERE id IN (" . implode(',', $slot_ids) . ")"
                     );
                     $booking->slot_details = $slots;
+                    $slot_total = 0;
+                    foreach ($slots as $slot) {
+                        $slot_total += floatval($slot->price);
+                    }
+                    $booking->slot_total = $slot_total;
                 }
+            }
+            if ($booking->type_category === 'hall') {
+                $addon_rows = $wpdb->get_results($wpdb->prepare(
+                    "SELECT addon_name, addon_price, quantity FROM {$wpdb->prefix}bt_booking_addons WHERE booking_id = %d",
+                    $booking->id
+                ));
+                $addons_subtotal = 0;
+                $addon_details = array();
+                foreach ($addon_rows as $addon) {
+                    $line_total = floatval($addon->addon_price) * intval($addon->quantity);
+                    $addons_subtotal += $line_total;
+                    $addon_details[] = array(
+                        'name' => $addon->addon_name,
+                        'price' => floatval($addon->addon_price),
+                        'quantity' => intval($addon->quantity),
+                        'line_total' => $line_total
+                    );
+                }
+                $booking->addon_details = $addon_details;
+                $booking->addons_subtotal = $addons_subtotal;
             }
         }
         
@@ -1410,6 +1781,11 @@ class BookingTour {
             $wpdb->delete(
                 $wpdb->prefix . 'bt_bookings',
                 array('id' => $booking_id),
+                array('%d')
+            );
+            $wpdb->delete(
+                $wpdb->prefix . 'bt_booking_addons',
+                array('booking_id' => $booking_id),
                 array('%d')
             );
             wp_send_json_success('Booking rejected and deleted');
@@ -1480,6 +1856,11 @@ class BookingTour {
         $wpdb->delete(
             $wpdb->prefix . 'bt_bookings',
             array('id' => $booking_id),
+            array('%d')
+        );
+        $wpdb->delete(
+            $wpdb->prefix . 'bt_booking_addons',
+            array('booking_id' => $booking_id),
             array('%d')
         );
         
@@ -1642,6 +2023,19 @@ class BookingTour {
             <input type="hidden" id="bt-selected-slots" value="">
             <input type="hidden" id="bt-total-price" value="0">
             <input type="hidden" id="bt-ticket-count" value="1">
+            <input type="hidden" id="bt-selected-addons" value="">
+
+            <div class="bt-addons-section" id="bt-addons-section" style="display: none;">
+                <div class="bt-section-header">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                        <path d="M20 12H4"></path>
+                        <path d="M14 6h6v6"></path>
+                        <path d="M10 18H4v-6"></path>
+                    </svg>
+                    <span class="bt-section-title">Choose Add-ons</span>
+                </div>
+                <div class="bt-addons-list" id="bt-addons-list"></div>
+            </div>
             
             <div class="bt-summary" id="bt-summary" style="display: none;">
                 <div class="bt-section-header">
@@ -1654,6 +2048,7 @@ class BookingTour {
                     <span class="bt-section-title">Booking Summary</span>
                 </div>
                 <div id="bt-summary-content"></div>
+                <div class="bt-summary-addons" id="bt-summary-addons"></div>
                 <div class="bt-summary-total" id="bt-summary-total"></div>
                 
                 <div class="bt-terms-section">

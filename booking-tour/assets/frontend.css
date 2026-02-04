@@ -56,6 +56,10 @@
     letter-spacing: -0.5px;
 }
 
+.bt-text-muted {
+    color: var(--bt-text-muted);
+}
+
 .bt-subtitle {
     font-size: 16px;
     color: var(--bt-text-muted);
@@ -675,6 +679,147 @@
     color: var(--bt-brand);
     font-size: 24px;
     font-weight: 700;
+}
+
+.bt-summary-addons {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px dashed var(--bt-border);
+}
+
+.bt-summary-addons .bt-addon-line {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    color: var(--bt-text-muted);
+    margin-bottom: 6px;
+}
+
+.bt-addons-section {
+    margin-top: 24px;
+    padding: 20px;
+    border: 1px solid var(--bt-border);
+    border-radius: 14px;
+    background: #fff;
+}
+
+.bt-addons-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+}
+
+.bt-addons-hint {
+    margin: 0;
+    font-size: 14px;
+    color: var(--bt-text-muted);
+}
+
+.bt-addons-btn {
+    padding: 10px 16px;
+    border-radius: 10px;
+    border: 1px solid var(--bt-border);
+    background: #fff;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.bt-addons-selected {
+    margin-top: 12px;
+    font-size: 14px;
+    color: var(--bt-text);
+}
+
+.bt-addons-selected .bt-addon-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border-radius: 999px;
+    background: var(--bt-bg);
+    border: 1px solid var(--bt-border);
+    margin: 4px 6px 0 0;
+    font-size: 12px;
+}
+
+.bt-modal-md {
+    max-width: 560px;
+}
+
+.bt-addons-list {
+    display: grid;
+    gap: 12px;
+}
+
+.bt-addon-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 14px;
+    border: 1px solid var(--bt-border);
+    border-radius: 12px;
+    background: #fff;
+}
+
+.bt-addon-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.bt-addon-name {
+    font-weight: 600;
+    color: var(--bt-text);
+}
+
+.bt-addon-meta {
+    font-size: 12px;
+    color: var(--bt-text-muted);
+}
+
+.bt-addon-controls {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.bt-addon-qty {
+    min-width: 24px;
+    text-align: center;
+    font-weight: 600;
+}
+
+.bt-addon-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    border: 1px solid var(--bt-border);
+    background: #fff;
+    cursor: pointer;
+    font-weight: 700;
+}
+
+.bt-addon-disabled {
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+.bt-modal-footer {
+    padding: 16px 24px 20px;
+    border-top: 1px solid var(--bt-border);
+    display: flex;
+    justify-content: flex-end;
+}
+
+.bt-addons-apply {
+    background: var(--bt-brand);
+    border: 1px solid var(--bt-brand);
+    color: #fff;
+    padding: 10px 18px;
+    border-radius: 10px;
+    font-weight: 600;
+    cursor: pointer;
 }
 
 /* Form Section */
