@@ -28,6 +28,7 @@ jQuery(document).ready(function($) {
     // Initialize
     const initialTypeId = $('#bt-type-id').val();
     if (initialTypeId) loadTypeData(initialTypeId);
+    toggleSections();
 
     // Tour type selection
     $('.bt-tour-btn').on('click', function() {
@@ -42,6 +43,7 @@ jQuery(document).ready(function($) {
         selectedDate = null;
         selectedSlots = [];
         ticketCount = 1;
+        toggleSections();
         updateUI();
         loadTypeData(typeId);
     });
@@ -163,6 +165,7 @@ jQuery(document).ready(function($) {
                     serverTime = response.data.serverTime || '00:00';
                     serverDate = response.data.serverDate || '';
                     
+                    toggleSections();
                     renderCalendar();
                     if (typeData && typeData.type_category === 'hall') renderSlots();
                     else renderTourInfo();
@@ -171,15 +174,21 @@ jQuery(document).ready(function($) {
                 } else {
                     console.error('Failed to load booking data:', response);
                     // Still render calendar with defaults
-                    typeData = { type_category: 'individual_tour', weekend_days: '' };
+                    const fallbackCategory = $('#bt-type-category').val() || 'individual_tour';
+                    typeData = { type_category: fallbackCategory, weekend_days: '' };
                     renderCalendar();
+                    if (typeData.type_category === 'hall') renderSlots();
+                    else renderTourInfo();
                 }
             },
             error: function(xhr, status, error) {
                 console.error('AJAX error loading booking data:', error);
                 // Still render calendar with defaults on error
-                typeData = { type_category: 'individual_tour', weekend_days: '' };
+                const fallbackCategory = $('#bt-type-category').val() || 'individual_tour';
+                typeData = { type_category: fallbackCategory, weekend_days: '' };
                 renderCalendar();
+                if (typeData.type_category === 'hall') renderSlots();
+                else renderTourInfo();
             }
         });
     }
@@ -413,27 +422,57 @@ jQuery(document).ready(function($) {
         const dateStr = formatDate(selectedDate);
         const dateBookedSlots = bookedSlots[dateStr] || [];
         const isToday = dateStr === serverDate;
+        const serverTimeParts = serverTime.split(':');
+        const serverHour = parseInt(serverTimeParts[0]) || 0;
+        const serverMinute = parseInt(serverTimeParts[1]) || 0;
+        const serverTimeMinutes = serverHour * 60 + serverMinute;
+
+        const bookedIntervals = dateBookedSlots.map(function(slotId) {
+            const slot = slots.find(s => parseInt(s.id) === parseInt(slotId));
+            if (!slot) return null;
+            return {
+                start: timeToMinutes(slot.start_time),
+                end: timeToMinutes(slot.end_time)
+            };
+        }).filter(Boolean);
 
         let html = '<div class="bt-slots-list">';
+        let selectionChanged = false;
         slots.forEach(function(slot) {
             const isBooked = dateBookedSlots.includes(parseInt(slot.id));
             const isSelected = selectedSlots.includes(parseInt(slot.id));
             
-            // Use JavaScript real-time for slot validation
+            const slotStart = timeToMinutes(slot.start_time);
+            const slotEnd = timeToMinutes(slot.end_time);
+
+            // Overlap check against any booked slot on the same date
+            let isOverlapBooked = false;
+            if (!isBooked && bookedIntervals.length) {
+                for (let i = 0; i < bookedIntervals.length; i++) {
+                    const interval = bookedIntervals[i];
+                    if (intervalsOverlap(slotStart, slotEnd, interval.start, interval.end)) {
+                        isOverlapBooked = true;
+                        break;
+                    }
+                }
+            }
+
+            // Live time restriction: disable if current time >= slot start time
             let isPastSlot = false;
             if (isToday) {
-                const now = new Date();
-                const currentMinutes = now.getHours() * 60 + now.getMinutes();
-                const [slotEndHour, slotEndMin] = slot.end_time.split(':').map(Number);
-                const slotEndMinutes = slotEndHour * 60 + slotEndMin;
-                isPastSlot = slotEndMinutes <= currentMinutes;
+                isPastSlot = serverTimeMinutes >= slotStart;
             }
             
-            const isDisabled = isBooked || isPastSlot;
+            const isDisabled = isBooked || isOverlapBooked || isPastSlot;
             
             let classes = 'bt-slot-card';
             if (isDisabled) classes += ' bt-slot-disabled';
             if (isSelected && !isDisabled) classes += ' bt-slot-selected';
+
+            if (isSelected && isDisabled) {
+                selectedSlots = selectedSlots.filter(id => id !== parseInt(slot.id));
+                selectionChanged = true;
+            }
             
             html += '<div class="' + classes + '" data-id="' + slot.id + '" data-price="' + slot.price + '">';
             html += '<div class="bt-slot-header"><span class="bt-slot-name">' + escapeHtml(slot.slot_name) + '</span></div>';
@@ -446,6 +485,7 @@ jQuery(document).ready(function($) {
         html += '</div>';
 
         $container.html(html);
+        if (selectionChanged) updateUI();
 
         $container.off('click', '.bt-slot-card').on('click', '.bt-slot-card', function() {
             if ($(this).hasClass('bt-slot-disabled')) return;
@@ -630,11 +670,19 @@ jQuery(document).ready(function($) {
         ticketCount = 1;
         $('#bt-booking-form')[0].reset();
         $('.bt-file-label span').text('Choose file (max 1MB)');
+        toggleSections();
         updateUI();
         renderCalendar();
         if (typeData.type_category === 'hall') renderSlots();
         else renderTourInfo();
         loadTypeData($('#bt-type-id').val());
+    }
+
+    function toggleSections() {
+        const category = $('#bt-type-category').val();
+        const showHall = category === 'hall';
+        $('.bt-slots-section').toggle(showHall);
+        $('.bt-tour-info-section').toggle(!showHall);
     }
 
     // File upload label
@@ -663,6 +711,18 @@ jQuery(document).ready(function($) {
         const ampm = hour >= 12 ? 'PM' : 'AM';
         const hour12 = hour % 12 || 12;
         return hour12 + ':' + m + ' ' + ampm;
+    }
+
+    function timeToMinutes(time) {
+        if (!time) return 0;
+        const parts = time.split(':');
+        const hours = parseInt(parts[0]) || 0;
+        const minutes = parseInt(parts[1]) || 0;
+        return (hours * 60) + minutes;
+    }
+
+    function intervalsOverlap(startA, endA, startB, endB) {
+        return startA < endB && endA > startB;
     }
 
     function escapeHtml(text) {
