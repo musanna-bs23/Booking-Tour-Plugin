@@ -31,6 +31,13 @@ jQuery(document).ready(function($) {
         loadBookings();
     });
 
+    $('#bt-report-doc').on('click', function() {
+        generateReport('doc');
+    });
+    $('#bt-report-pdf').on('click', function() {
+        generateReport('pdf');
+    });
+
     // Type settings form
     $('#bt-type-settings-form').on('submit', function(e) {
         e.preventDefault();
@@ -278,6 +285,8 @@ jQuery(document).ready(function($) {
             nonce: btAdmin.nonce,
             type_id: $('#bt-filter-type').val(),
             status: $('#bt-filter-status').val(),
+            start_date: $('#bt-filter-start-date').val(),
+            end_date: $('#bt-filter-end-date').val(),
             page: currentPage
         }, function(response) {
             if (response.success) {
@@ -339,6 +348,20 @@ jQuery(document).ready(function($) {
             });
         }
         $(targetSelector).html(html);
+    }
+
+    function generateReport(format) {
+        const params = {
+            action: 'bt_generate_report',
+            nonce: btAdmin.nonce,
+            type_id: $('#bt-filter-type').val(),
+            status: $('#bt-filter-status').val(),
+            start_date: $('#bt-filter-start-date').val(),
+            end_date: $('#bt-filter-end-date').val(),
+            format: format
+        };
+        const query = $.param(params);
+        window.open(btAdmin.ajaxUrl + '?' + query, '_blank');
     }
 
     function renderPagination(totalPages, current, targetSelector) {
@@ -425,7 +448,7 @@ jQuery(document).ready(function($) {
         const $btn = $(this);
         const action = $btn.data('action');
         
-        if (action === 'rejected' && !confirm('Reject and delete this booking?')) return;
+        if (action === 'rejected' && !confirm('Reject this booking?')) return;
         
         $btn.prop('disabled', true).text('...');
         $.post(btAdmin.ajaxUrl, {

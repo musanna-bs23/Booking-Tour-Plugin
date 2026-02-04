@@ -37,6 +37,7 @@ class BookingTour {
         add_action('wp_ajax_bt_delete_booking', array($this, 'delete_booking'));
         add_action('wp_ajax_bt_get_booking_data', array($this, 'get_booking_data'));
         add_action('wp_ajax_nopriv_bt_get_booking_data', array($this, 'get_booking_data'));
+        add_action('wp_ajax_bt_generate_report', array($this, 'generate_report'));
         
         // Slot management (Hall only)
         add_action('wp_ajax_bt_save_slot', array($this, 'save_slot'));
@@ -232,7 +233,26 @@ class BookingTour {
                         <option value="">All Status</option>
                         <option value="pending">Pending</option>
                         <option value="approved">Approved</option>
+                        <option value="rejected">Rejected</option>
                     </select>
+                </div>
+                <div class="bt-filter-group">
+                    <svg class="bt-filter-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                        <line x1="16" y1="2" x2="16" y2="6"></line>
+                        <line x1="8" y1="2" x2="8" y2="6"></line>
+                        <line x1="3" y1="10" x2="21" y2="10"></line>
+                    </svg>
+                    <input type="date" id="bt-filter-start-date" placeholder="Start date">
+                </div>
+                <div class="bt-filter-group">
+                    <svg class="bt-filter-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                        <line x1="16" y1="2" x2="16" y2="6"></line>
+                        <line x1="8" y1="2" x2="8" y2="6"></line>
+                        <line x1="3" y1="10" x2="21" y2="10"></line>
+                    </svg>
+                    <input type="date" id="bt-filter-end-date" placeholder="End date">
                 </div>
                 <button class="button bt-filter-btn" id="bt-filter-btn">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
@@ -240,6 +260,12 @@ class BookingTour {
                         <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                     </svg>
                     Filter
+                </button>
+                <button class="button bt-filter-btn" id="bt-report-doc">
+                    Generate Report (DOC)
+                </button>
+                <button class="button bt-filter-btn" id="bt-report-pdf">
+                    Generate Report (PDF)
                 </button>
             </div>
 
@@ -1675,6 +1701,8 @@ class BookingTour {
         global $wpdb;
         $type_id = isset($_POST['type_id']) ? intval($_POST['type_id']) : 0;
         $status = isset($_POST['status']) ? sanitize_text_field($_POST['status']) : '';
+        $start_date = isset($_POST['start_date']) ? sanitize_text_field($_POST['start_date']) : '';
+        $end_date = isset($_POST['end_date']) ? sanitize_text_field($_POST['end_date']) : '';
         $page = isset($_POST['page']) ? intval($_POST['page']) : 1;
         $offset = ($page - 1) * $this->items_per_page;
 
@@ -1688,6 +1716,14 @@ class BookingTour {
         if (!empty($status)) {
             $where .= " AND b.status = %s";
             $params[] = $status;
+        }
+        if (!empty($start_date)) {
+            $where .= " AND b.booking_date >= %s";
+            $params[] = $start_date;
+        }
+        if (!empty($end_date)) {
+            $where .= " AND b.booking_date <= %s";
+            $params[] = $end_date;
         }
         
         $count_sql = "SELECT COUNT(*) FROM {$wpdb->prefix}bt_bookings b WHERE $where";
@@ -1763,71 +1799,43 @@ class BookingTour {
             wp_send_json_error('Invalid status');
         }
 
-        // If rejecting, delete the booking
-        if ($status === 'rejected') {
+        // If approving, send confirmation email
+        if ($status === 'approved') {
             $booking = $wpdb->get_row($wpdb->prepare(
-                "SELECT payment_image FROM {$wpdb->prefix}bt_bookings WHERE id = %d",
+                "SELECT b.*, t.type_name, t.type_category, t.tour_start_time, t.tour_end_time 
+                 FROM {$wpdb->prefix}bt_bookings b 
+                 LEFT JOIN {$wpdb->prefix}bt_booking_types t ON b.booking_type_id = t.id 
+                 WHERE b.id = %d",
                 $booking_id
             ));
             
-            if ($booking && $booking->payment_image) {
-                $upload_dir = wp_upload_dir();
-                $file_path = str_replace($upload_dir['baseurl'], $upload_dir['basedir'], $booking->payment_image);
-                if (file_exists($file_path)) {
-                    unlink($file_path);
-                }
-            }
-            
-            $wpdb->delete(
-                $wpdb->prefix . 'bt_bookings',
-                array('id' => $booking_id),
-                array('%d')
-            );
-            $wpdb->delete(
-                $wpdb->prefix . 'bt_booking_addons',
-                array('booking_id' => $booking_id),
-                array('%d')
-            );
-            wp_send_json_success('Booking rejected and deleted');
-        } else {
-            // If approving, send confirmation email
-            if ($status === 'approved') {
-                $booking = $wpdb->get_row($wpdb->prepare(
-                    "SELECT b.*, t.type_name, t.type_category, t.tour_start_time, t.tour_end_time 
-                     FROM {$wpdb->prefix}bt_bookings b 
-                     LEFT JOIN {$wpdb->prefix}bt_booking_types t ON b.booking_type_id = t.id 
-                     WHERE b.id = %d",
-                    $booking_id
-                ));
+            if ($booking) {
+                $type = (object) array(
+                    'type_name' => $booking->type_name,
+                    'type_category' => $booking->type_category,
+                    'tour_start_time' => $booking->tour_start_time,
+                    'tour_end_time' => $booking->tour_end_time
+                );
                 
-                if ($booking) {
-                    $type = (object) array(
-                        'type_name' => $booking->type_name,
-                        'type_category' => $booking->type_category,
-                        'tour_start_time' => $booking->tour_start_time,
-                        'tour_end_time' => $booking->tour_end_time
-                    );
-                    
-                    $this->send_confirmation_email(
-                        $booking->customer_email,
-                        $booking->customer_name,
-                        $type,
-                        $booking->booking_date,
-                        $booking->slot_ids,
-                        $booking->ticket_count
-                    );
-                }
+                $this->send_confirmation_email(
+                    $booking->customer_email,
+                    $booking->customer_name,
+                    $type,
+                    $booking->booking_date,
+                    $booking->slot_ids,
+                    $booking->ticket_count
+                );
             }
-            
-            $wpdb->update(
-                $wpdb->prefix . 'bt_bookings',
-                array('status' => $status),
-                array('id' => $booking_id),
-                array('%s'),
-                array('%d')
-            );
-            wp_send_json_success('Status updated successfully');
         }
+        
+        $wpdb->update(
+            $wpdb->prefix . 'bt_bookings',
+            array('status' => $status),
+            array('id' => $booking_id),
+            array('%s'),
+            array('%d')
+        );
+        wp_send_json_success('Status updated successfully');
     }
 
     public function delete_booking() {
@@ -1865,6 +1873,188 @@ class BookingTour {
         );
         
         wp_send_json_success('Booking deleted');
+    }
+
+    public function generate_report() {
+        check_ajax_referer('bt_admin_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_die('Unauthorized');
+        }
+
+        global $wpdb;
+        $type_id = isset($_GET['type_id']) ? intval($_GET['type_id']) : 0;
+        $status = isset($_GET['status']) ? sanitize_text_field($_GET['status']) : '';
+        $start_date = isset($_GET['start_date']) ? sanitize_text_field($_GET['start_date']) : '';
+        $end_date = isset($_GET['end_date']) ? sanitize_text_field($_GET['end_date']) : '';
+        $format = isset($_GET['format']) ? sanitize_text_field($_GET['format']) : 'doc';
+
+        $where = "1=1";
+        $params = array();
+        if ($type_id > 0) {
+            $where .= " AND b.booking_type_id = %d";
+            $params[] = $type_id;
+        }
+        if (!empty($status)) {
+            $where .= " AND b.status = %s";
+            $params[] = $status;
+        }
+        if (!empty($start_date)) {
+            $where .= " AND b.booking_date >= %s";
+            $params[] = $start_date;
+        }
+        if (!empty($end_date)) {
+            $where .= " AND b.booking_date <= %s";
+            $params[] = $end_date;
+        }
+
+        $sql = "SELECT b.id, b.booking_type_id, b.booking_date, b.slot_ids, b.ticket_count, b.total_price,
+                       b.customer_name, b.customer_email, b.customer_phone, b.status,
+                       t.type_name, t.type_category, t.tour_price, t.ticket_price
+                FROM {$wpdb->prefix}bt_bookings b
+                LEFT JOIN {$wpdb->prefix}bt_booking_types t ON b.booking_type_id = t.id
+                WHERE $where ORDER BY b.booking_date DESC, b.id DESC";
+        $bookings = empty($params) ? $wpdb->get_results($sql) : $wpdb->get_results($wpdb->prepare($sql, $params));
+
+        $booking_ids = array();
+        $slot_ids_all = array();
+        $addon_rows = array();
+        foreach ($bookings as $booking) {
+            $booking_ids[] = intval($booking->id);
+            if (!empty($booking->slot_ids)) {
+                $slot_ids_all = array_merge($slot_ids_all, array_map('intval', explode(',', $booking->slot_ids)));
+            }
+        }
+        $slot_ids_all = array_values(array_unique(array_filter($slot_ids_all)));
+
+        $slot_map = array();
+        if (!empty($slot_ids_all)) {
+            $slots = $wpdb->get_results("SELECT id, slot_name, start_time, end_time, price FROM {$wpdb->prefix}bt_slots WHERE id IN (" . implode(',', $slot_ids_all) . ")");
+            foreach ($slots as $slot) {
+                $slot_map[intval($slot->id)] = $slot;
+            }
+        }
+
+        $addons_map = array();
+        if (!empty($booking_ids)) {
+            $addon_rows = $wpdb->get_results("SELECT booking_id, addon_name, addon_price, quantity FROM {$wpdb->prefix}bt_booking_addons WHERE booking_id IN (" . implode(',', $booking_ids) . ")");
+            foreach ($addon_rows as $row) {
+                $bid = intval($row->booking_id);
+                if (!isset($addons_map[$bid])) $addons_map[$bid] = array();
+                $addons_map[$bid][] = $row;
+            }
+        }
+
+        $filters = array(
+            'Type' => $type_id > 0 ? $this->get_type_name($type_id) : 'All',
+            'Status' => $status ? ucfirst($status) : 'All',
+            'Start Date' => $start_date ?: 'Any',
+            'End Date' => $end_date ?: 'Any'
+        );
+
+        $html = $this->build_report_html($bookings, $slot_map, $addons_map, $filters);
+        $filename_base = 'booking-tour-report-' . date('Ymd-His');
+
+        if ($format === 'pdf') {
+            if (class_exists('\\Dompdf\\Dompdf')) {
+                $dompdf = new \Dompdf\Dompdf();
+                $dompdf->loadHtml($html);
+                $dompdf->setPaper('A4', 'portrait');
+                $dompdf->render();
+                header('Content-Type: application/pdf');
+                header('Content-Disposition: attachment; filename="' . $filename_base . '.pdf"');
+                echo $dompdf->output();
+                exit;
+            }
+            wp_die('PDF generation is not available. Please install dompdf.');
+        }
+
+        header('Content-Type: application/msword');
+        header('Content-Disposition: attachment; filename="' . $filename_base . '.doc"');
+        echo $html;
+        exit;
+    }
+
+    private function build_report_html($bookings, $slot_map, $addons_map, $filters) {
+        $html = '<html><head><meta charset="utf-8"><style>
+            body{font-family:Arial,sans-serif;color:#111827;font-size:12px}
+            h1{font-size:20px;margin:0 0 10px}
+            h2{font-size:14px;margin:18px 0 8px}
+            table{width:100%;border-collapse:collapse;margin-bottom:14px}
+            th,td{border:1px solid #e5e7eb;padding:6px 8px;text-align:left;vertical-align:top}
+            th{background:#f3f4f6}
+            .muted{color:#6b7280}
+            .section{margin-bottom:12px}
+        </style></head><body>';
+        $html .= '<h1>Booking Tour Report</h1>';
+        $html .= '<div class="section"><strong>Generated:</strong> ' . esc_html(date('Y-m-d H:i:s')) . '</div>';
+        $html .= '<div class="section"><strong>Applied Filters:</strong><br>';
+        foreach ($filters as $key => $val) {
+            $html .= esc_html($key) . ': ' . esc_html($val) . '<br>';
+        }
+        $html .= '</div>';
+
+        foreach ($bookings as $booking) {
+            $html .= '<h2>Booking #' . intval($booking->id) . '</h2>';
+            $html .= '<table>';
+            $html .= '<tr><th colspan="2">Booked By</th></tr>';
+            $html .= '<tr><td>Name</td><td>' . esc_html($booking->customer_name) . '</td></tr>';
+            $html .= '<tr><td>Email</td><td>' . esc_html($booking->customer_email) . '</td></tr>';
+            $html .= '<tr><td>Phone</td><td>' . esc_html($booking->customer_phone) . '</td></tr>';
+            $html .= '<tr><th colspan="2">Booking Information</th></tr>';
+            $html .= '<tr><td>Type</td><td>' . esc_html($booking->type_name) . '</td></tr>';
+            $html .= '<tr><td>Date</td><td>' . esc_html($booking->booking_date) . '</td></tr>';
+            if ($booking->type_category === 'individual_tour') {
+                $html .= '<tr><td>Tickets</td><td>' . intval($booking->ticket_count) . '</td></tr>';
+            }
+            if (!empty($booking->slot_ids)) {
+                $slot_names = array();
+                $slot_total = 0;
+                foreach (array_map('intval', explode(',', $booking->slot_ids)) as $sid) {
+                    if (isset($slot_map[$sid])) {
+                        $slot = $slot_map[$sid];
+                        $slot_names[] = $slot->slot_name . ' (' . date('g:i A', strtotime($slot->start_time)) . ' - ' . date('g:i A', strtotime($slot->end_time)) . ')';
+                        $slot_total += floatval($slot->price);
+                    }
+                }
+                $html .= '<tr><td>Slot(s)</td><td>' . esc_html(implode(', ', $slot_names)) . '</td></tr>';
+                $html .= '<tr><td>Base Price</td><td>BDT ' . number_format($slot_total, 2) . '</td></tr>';
+            } elseif ($booking->type_category === 'event_tour') {
+                $base = floatval($booking->tour_price);
+                $html .= '<tr><td>Base Price</td><td>BDT ' . number_format($base, 2) . '</td></tr>';
+            } elseif ($booking->type_category === 'individual_tour') {
+                $base = floatval($booking->ticket_price) * intval($booking->ticket_count);
+                $html .= '<tr><td>Base Price</td><td>BDT ' . number_format($base, 2) . '</td></tr>';
+            }
+
+            $addons_subtotal = 0;
+            if (isset($addons_map[intval($booking->id)]) && $booking->type_category === 'hall') {
+                $addon_lines = '';
+                foreach ($addons_map[intval($booking->id)] as $addon) {
+                    $line = floatval($addon->addon_price) * intval($addon->quantity);
+                    $addons_subtotal += $line;
+                    $addon_lines .= esc_html($addon->addon_name) . ' × ' . intval($addon->quantity) .
+                        ' @ BDT ' . number_format($addon->addon_price, 2) .
+                        ' = BDT ' . number_format($line, 2) . '<br>';
+                }
+                $html .= '<tr><td>Add-ons</td><td>' . $addon_lines . '</td></tr>';
+            }
+            $html .= '<tr><td>Add-ons Subtotal</td><td>BDT ' . number_format($addons_subtotal, 2) . '</td></tr>';
+            $html .= '<tr><td>Final Total</td><td>BDT ' . number_format($booking->total_price, 2) . '</td></tr>';
+            $html .= '<tr><td>Status</td><td>' . esc_html(ucfirst($booking->status)) . '</td></tr>';
+            $html .= '</table>';
+        }
+
+        $html .= '</body></html>';
+        return $html;
+    }
+
+    private function get_type_name($type_id) {
+        global $wpdb;
+        $name = $wpdb->get_var($wpdb->prepare(
+            "SELECT type_name FROM {$wpdb->prefix}bt_booking_types WHERE id = %d",
+            $type_id
+        ));
+        return $name ?: 'Unknown';
     }
 
     // Shortcode: Combined Booking (Hall + Tours)
