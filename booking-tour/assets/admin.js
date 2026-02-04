@@ -16,7 +16,7 @@ jQuery(document).ready(function($) {
         const typeId = $('#bt-type-bookings-body').data('type-id');
         const category = $('#bt-type-bookings-body').data('category');
         loadTypeBookings(typeId);
-        if (category === 'hall') loadSlots(typeId);
+        if (category === 'hall' || category === 'staircase') loadSlots(typeId);
     }
 
     // Load holiday calendar

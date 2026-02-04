@@ -18,6 +18,7 @@ class BookingTour {
     
     public function __construct() {
         register_activation_hook(__FILE__, array($this, 'activate'));
+        $this->ensure_staircase_type();
         add_action('admin_menu', array($this, 'add_admin_menu'));
         add_action('admin_enqueue_scripts', array($this, 'admin_scripts'));
         add_action('wp_enqueue_scripts', array($this, 'frontend_scripts'));
@@ -64,6 +65,29 @@ class BookingTour {
         if (!file_exists($bt_dir)) {
             wp_mkdir_p($bt_dir);
         }
+    }
+
+    private function ensure_staircase_type() {
+        global $wpdb;
+        $table = $wpdb->prefix . 'bt_booking_types';
+        $exists = $wpdb->get_var($wpdb->prepare(
+            "SELECT COUNT(*) FROM {$table} WHERE type_category = %s OR type_slug = %s",
+            'staircase',
+            'staircase-book'
+        ));
+        if (intval($exists) > 0) {
+            return;
+        }
+        $wpdb->insert(
+            $table,
+            array(
+                'type_name' => 'Staircase Book',
+                'type_slug' => 'staircase-book',
+                'type_category' => 'staircase',
+                'weekend_days' => ''
+            ),
+            array('%s', '%s', '%s', '%s')
+        );
     }
 
     public function add_admin_menu() {
@@ -323,7 +347,7 @@ class BookingTour {
         <div class="wrap bt-admin-wrap">
             <h1>
                 <svg class="bt-icon-title" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <?php if ($type->type_category === 'hall'): ?>
+                <?php if ($type->type_category === 'hall' || $type->type_category === 'staircase'): ?>
                     <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
                     <polyline points="9 22 9 12 15 12 15 22"></polyline>
                     <?php else: ?>
@@ -369,7 +393,7 @@ class BookingTour {
                 </form>
             </div>
             
-            <?php if ($type->type_category === 'hall'): ?>
+            <?php if ($type->type_category === 'hall' || $type->type_category === 'staircase'): ?>
             <!-- Slot Management (Multipurpose Hall Only) -->
             <div class="bt-settings-card">
                 <h2>
@@ -784,9 +808,9 @@ class BookingTour {
             $type->booking_window_days = intval(get_option('bt_individual_booking_window_days_' . $type_id, 1));
         }
 
-        // Get slots (only for hall)
+        // Get slots (hall and staircase)
         $slots = array();
-        if ($type && $type->type_category === 'hall') {
+        if ($type && ($type->type_category === 'hall' || $type->type_category === 'staircase')) {
             $slots = $wpdb->get_results($wpdb->prepare(
                 "SELECT * FROM {$wpdb->prefix}bt_slots WHERE booking_type_id = %d ORDER BY start_time",
                 $type_id
@@ -811,7 +835,7 @@ class BookingTour {
         foreach ($bookings as $booking) {
             $date = $booking->booking_date;
             
-            if ($type->type_category === 'hall') {
+            if ($type->type_category === 'hall' || $type->type_category === 'staircase') {
                 if (!isset($bookedSlots[$date])) {
                     $bookedSlots[$date] = array();
                 }
@@ -914,7 +938,7 @@ class BookingTour {
         $totalTickets = 0;
         
         foreach ($bookings as $booking) {
-            if ($type->type_category === 'hall' && $booking->slot_ids) {
+            if (($type->type_category === 'hall' || $type->type_category === 'staircase') && $booking->slot_ids) {
                 $slot_ids = array_map('intval', explode(',', $booking->slot_ids));
                 $bookedSlots = array_merge($bookedSlots, $slot_ids);
             }
@@ -1050,8 +1074,8 @@ class BookingTour {
             wp_send_json_error('Invalid booking type');
         }
 
-        // Validate slots for hall booking
-        if ($type->type_category === 'hall' && empty($slot_ids)) {
+        // Validate slots for hall/staircase booking
+        if (($type->type_category === 'hall' || $type->type_category === 'staircase') && empty($slot_ids)) {
             wp_send_json_error('Please select at least one slot');
         }
 
@@ -1097,7 +1121,7 @@ class BookingTour {
         }
 
         // Check availability based on type
-        if ($type->type_category === 'hall') {
+        if ($type->type_category === 'hall' || $type->type_category === 'staircase') {
             // Check slot availability
             $existing = $wpdb->get_results($wpdb->prepare(
                 "SELECT slot_ids FROM {$wpdb->prefix}bt_bookings 
@@ -1212,7 +1236,7 @@ class BookingTour {
         $message .= "Booking Type: {$type->type_name}\n";
         $message .= "Date: " . date('F j, Y', strtotime($date)) . "\n";
         
-        if ($type->type_category === 'hall' && $slot_ids) {
+        if (($type->type_category === 'hall' || $type->type_category === 'staircase') && $slot_ids) {
             $slot_list = '';
             $slot_id_arr = array_map('intval', explode(',', $slot_ids));
             $slots = $wpdb->get_results(
@@ -1263,7 +1287,7 @@ class BookingTour {
         $message .= "Booking Type: {$type->type_name}\n";
         $message .= "Date: " . date('F j, Y', strtotime($date)) . "\n";
         
-        if ($type->type_category === 'hall' && $slot_ids) {
+        if (($type->type_category === 'hall' || $type->type_category === 'staircase') && $slot_ids) {
             $slot_id_arr = array_map('intval', explode(',', $slot_ids));
             $slots = $wpdb->get_results(
                 "SELECT slot_name, start_time, end_time FROM {$wpdb->prefix}bt_slots WHERE id IN (" . implode(',', $slot_id_arr) . ")"
@@ -1332,9 +1356,9 @@ class BookingTour {
         
         $bookings = $wpdb->get_results($wpdb->prepare($sql, $params));
         
-        // Get slot names for hall bookings
+        // Get slot names for hall/staircase bookings
         foreach ($bookings as &$booking) {
-            if ($booking->type_category === 'hall' && $booking->slot_ids) {
+            if (($booking->type_category === 'hall' || $booking->type_category === 'staircase') && $booking->slot_ids) {
                 $slot_ids = array_map('intval', explode(',', $booking->slot_ids));
                 if (!empty($slot_ids)) {
                     $slots = $wpdb->get_results(
@@ -1466,10 +1490,11 @@ class BookingTour {
     public function render_book_tour_shortcode($atts) {
         global $wpdb;
         $hall_type = $wpdb->get_row("SELECT * FROM {$wpdb->prefix}bt_booking_types WHERE type_category = 'hall'");
+        $staircase_type = $wpdb->get_row("SELECT * FROM {$wpdb->prefix}bt_booking_types WHERE type_category = 'staircase'");
         $event_type = $wpdb->get_row("SELECT * FROM {$wpdb->prefix}bt_booking_types WHERE type_category = 'event_tour'");
         $individual_type = $wpdb->get_row("SELECT * FROM {$wpdb->prefix}bt_booking_types WHERE type_category = 'individual_tour'");
-
-        if (!$hall_type || !$event_type || !$individual_type) {
+        
+        if (!$hall_type || !$staircase_type || !$event_type || !$individual_type) {
             return '<p>Booking system is not configured properly.</p>';
         }
 
@@ -1495,6 +1520,13 @@ class BookingTour {
                     </svg>
                     <span>Multipurpose Hall</span>
                 </button>
+                <button class="bt-tour-btn" data-type-id="<?php echo esc_attr($staircase_type->id); ?>" data-category="staircase">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                        <path d="M3 21h4v-4h4v-4h4v-4h6"></path>
+                        <path d="M3 7h4v4H3z"></path>
+                    </svg>
+                    <span>Staircase Book</span>
+                </button>
                 <button class="bt-tour-btn" data-type-id="<?php echo esc_attr($individual_type->id); ?>" data-category="individual_tour">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
                         <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
@@ -1516,6 +1548,7 @@ class BookingTour {
             <input type="hidden" id="bt-type-id" value="<?php echo esc_attr($hall_type->id); ?>">
             <input type="hidden" id="bt-type-category" value="hall">
             <input type="hidden" id="bt-hall-type-id" value="<?php echo esc_attr($hall_type->id); ?>">
+            <input type="hidden" id="bt-staircase-type-id" value="<?php echo esc_attr($staircase_type->id); ?>">
             <input type="hidden" id="bt-event-type-id" value="<?php echo esc_attr($event_type->id); ?>">
             <input type="hidden" id="bt-individual-type-id" value="<?php echo esc_attr($individual_type->id); ?>">
 

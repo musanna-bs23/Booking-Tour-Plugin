@@ -72,7 +72,7 @@ jQuery(document).ready(function($) {
             return;
         }
         
-        if (category === 'hall' && selectedSlots.length === 0) {
+        if (isHallCategory(category) && selectedSlots.length === 0) {
             showToast('Please select at least one slot', 'error');
             return;
         }
@@ -171,7 +171,7 @@ jQuery(document).ready(function($) {
                     
                     toggleSections();
                     renderCalendar();
-                    if (typeData && typeData.type_category === 'hall') renderSlots();
+                    if (typeData && isHallCategory(typeData.type_category)) renderSlots();
                     else renderTourInfo();
                     
                     startPolling();
@@ -181,7 +181,7 @@ jQuery(document).ready(function($) {
                     const fallbackCategory = $('#bt-type-category').val() || 'individual_tour';
                     typeData = { type_category: fallbackCategory, weekend_days: '' };
                     renderCalendar();
-                    if (typeData.type_category === 'hall') renderSlots();
+                    if (isHallCategory(typeData.type_category)) renderSlots();
                     else renderTourInfo();
                 }
             },
@@ -191,7 +191,7 @@ jQuery(document).ready(function($) {
                 const fallbackCategory = $('#bt-type-category').val() || 'individual_tour';
                 typeData = { type_category: fallbackCategory, weekend_days: '' };
                 renderCalendar();
-                if (typeData.type_category === 'hall') renderSlots();
+                if (isHallCategory(typeData.type_category)) renderSlots();
                 else renderTourInfo();
             }
         });
@@ -226,7 +226,7 @@ jQuery(document).ready(function($) {
                 // Track if data changed
                 let hasChanges = false;
                 
-                if (typeData.type_category === 'hall') {
+                if (isHallCategory(typeData.type_category)) {
                     if (selectedDate) {
                         const dateStr = formatDate(selectedDate);
                         const newBooked = response.data.bookedSlots || [];
@@ -294,7 +294,7 @@ jQuery(document).ready(function($) {
                 // Re-render if data changed
                 if (hasChanges) {
                     renderCalendar();
-                    if (typeData.type_category === 'hall') {
+                    if (isHallCategory(typeData.type_category)) {
                         renderSlots();
                     } else {
                         renderTourInfo();
@@ -386,7 +386,7 @@ jQuery(document).ready(function($) {
             }
 
             let isNoHallAvailabilityToday = false;
-            if (category === 'hall' && isToday) {
+            if (isHallCategory(category) && isToday) {
                 isNoHallAvailabilityToday = !hasBookableHallSlots(dateStr, localTimeMinutes);
             }
 
@@ -415,7 +415,7 @@ jQuery(document).ready(function($) {
             selectedSlots = [];
             ticketCount = 1;
             
-            if (typeData.type_category === 'hall') renderSlots();
+            if (isHallCategory(typeData.type_category)) renderSlots();
             else renderTourInfo();
             
             updateUI();
@@ -640,7 +640,7 @@ jQuery(document).ready(function($) {
         let showSummary = false;
         let totalPrice = 0;
         
-        if (category === 'hall' && selectedDate && selectedSlots.length > 0) {
+        if (isHallCategory(category) && selectedDate && selectedSlots.length > 0) {
             showSummary = true;
             let slotsHtml = '';
             selectedSlots.forEach(function(slotId) {
@@ -688,14 +688,14 @@ jQuery(document).ready(function($) {
         toggleSections();
         updateUI();
         renderCalendar();
-        if (typeData.type_category === 'hall') renderSlots();
+        if (isHallCategory(typeData.type_category)) renderSlots();
         else renderTourInfo();
         loadTypeData($('#bt-type-id').val());
     }
 
     function toggleSections() {
         const category = $('#bt-type-category').val();
-        const showHall = category === 'hall';
+        const showHall = isHallCategory(category);
         $('.bt-slots-section').toggle(showHall);
         $('.bt-tour-info-section').toggle(!showHall);
     }
@@ -730,6 +730,10 @@ jQuery(document).ready(function($) {
 
     function getSharedTourStartTime() {
         return sharedTourStartTime;
+    }
+
+    function isHallCategory(category) {
+        return category === 'hall' || category === 'staircase';
     }
 
     function hasBookableHallSlots(dateStr, serverTimeMinutes) {
