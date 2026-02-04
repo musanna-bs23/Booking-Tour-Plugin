@@ -1,0 +1,680 @@
+jQuery(document).ready(function($) {
+    // Check if booking container exists
+    if (!$('.bt-booking-container').length) return;
+    
+    // Ensure btFrontend is available
+    if (typeof btFrontend === 'undefined') {
+        console.error('btFrontend not defined. Please ensure the script is properly enqueued.');
+        return;
+    }
+
+    let currentDate = new Date();
+    let selectedDate = null;
+    let selectedSlots = [];
+    let typeData = null;
+    let slots = [];
+    let holidays = [];
+    let bookedSlots = {};
+    let bookedDates = [];
+    let ticketsByDate = {};
+    let eventBlockedDates = [];
+    let individualBlockedDates = [];
+    let serverTime = btFrontend.serverTime || '00:00';
+    let serverDate = btFrontend.serverDate || '';
+    let pollInterval = null;
+    let ticketCount = 1;
+    let mode = $('.bt-booking-container').data('mode');
+
+    // Initialize
+    const initialTypeId = $('#bt-type-id').val();
+    if (initialTypeId) loadTypeData(initialTypeId);
+
+    // Tour type selection
+    $('.bt-tour-btn').on('click', function() {
+        $('.bt-tour-btn').removeClass('active');
+        $(this).addClass('active');
+        
+        const typeId = $(this).data('type-id');
+        const category = $(this).data('category');
+        $('#bt-type-id').val(typeId);
+        $('#bt-type-category').val(category);
+        
+        selectedDate = null;
+        selectedSlots = [];
+        ticketCount = 1;
+        updateUI();
+        loadTypeData(typeId);
+    });
+
+    // Calendar navigation
+    $('#bt-prev-month').on('click', function() {
+        currentDate.setMonth(currentDate.getMonth() - 1);
+        renderCalendar();
+    });
+
+    $('#bt-next-month').on('click', function() {
+        currentDate.setMonth(currentDate.getMonth() + 1);
+        renderCalendar();
+    });
+
+    // Form submission
+    $('#bt-booking-form').on('submit', function(e) {
+        e.preventDefault();
+        
+        const category = $('#bt-type-category').val();
+        
+        if (!selectedDate) {
+            showToast('Please select a date', 'error');
+            return;
+        }
+        
+        if (category === 'hall' && selectedSlots.length === 0) {
+            showToast('Please select at least one slot', 'error');
+            return;
+        }
+
+        const name = $('#bt-name').val().trim();
+        const phone = $('#bt-phone').val().trim();
+        const email = $('#bt-email').val().trim();
+        const transactionId = $('#bt-transaction-id').val().trim();
+        const paymentImage = $('#bt-payment-image')[0].files[0];
+
+        if (!name || !phone || !email) {
+            showToast('Please fill in all required fields', 'error');
+            return;
+        }
+
+        if (!transactionId && !paymentImage) {
+            showToast('Please provide Transaction ID or Payment Screenshot', 'error');
+            return;
+        }
+
+        if (paymentImage && paymentImage.size > btFrontend.maxUploadSize) {
+            showToast('Payment image must be less than 1MB', 'error');
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('action', 'bt_submit_booking');
+        formData.append('type_id', $('#bt-type-id').val());
+        formData.append('booking_date', formatDate(selectedDate));
+        formData.append('slot_ids', selectedSlots.join(','));
+        formData.append('ticket_count', ticketCount);
+        formData.append('total_price', $('#bt-total-price').val());
+        formData.append('customer_name', name);
+        formData.append('customer_email', email);
+        formData.append('customer_phone', phone);
+        formData.append('transaction_id', transactionId);
+        formData.append('notes', $('#bt-notes').val());
+        
+        if (paymentImage) formData.append('payment_image', paymentImage);
+
+        $('#bt-submit-btn').prop('disabled', true).html('<span class="bt-spinner"></span> Submitting...');
+
+        $.ajax({
+            url: btFrontend.ajaxUrl,
+            type: 'POST',
+            data: formData,
+            processData: false,
+            contentType: false,
+            success: function(response) {
+                if (response.success) {
+                    showToast(response.data, 'success');
+                    resetForm();
+                } else {
+                    showToast(response.data || 'Error submitting booking', 'error');
+                }
+                resetSubmitBtn();
+            },
+            error: function() {
+                showToast('Network error. Please try again.', 'error');
+                resetSubmitBtn();
+            }
+        });
+    });
+
+    function resetSubmitBtn() {
+        $('#bt-submit-btn').prop('disabled', false).html('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg> Submit Booking Request');
+    }
+
+    function loadTypeData(typeId) {
+        if (!typeId) {
+            console.error('No type ID provided');
+            return;
+        }
+        
+        $.ajax({
+            url: btFrontend.ajaxUrl,
+            type: 'POST',
+            data: {
+                action: 'bt_get_booking_data',
+                type_id: typeId
+            },
+            success: function(response) {
+                if (response.success && response.data) {
+                    typeData = response.data.type;
+                    slots = response.data.slots || [];
+                    holidays = response.data.holidays || [];
+                    bookedSlots = response.data.bookedSlots || {};
+                    bookedDates = response.data.bookedDates || [];
+                    ticketsByDate = response.data.ticketsByDate || {};
+                    eventBlockedDates = response.data.eventBlockedDates || [];
+                    individualBlockedDates = response.data.individualBlockedDates || [];
+                    serverTime = response.data.serverTime || '00:00';
+                    serverDate = response.data.serverDate || '';
+                    
+                    renderCalendar();
+                    if (typeData && typeData.type_category === 'hall') renderSlots();
+                    else renderTourInfo();
+                    
+                    startPolling();
+                } else {
+                    console.error('Failed to load booking data:', response);
+                    // Still render calendar with defaults
+                    typeData = { type_category: 'individual_tour', weekend_days: '' };
+                    renderCalendar();
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('AJAX error loading booking data:', error);
+                // Still render calendar with defaults on error
+                typeData = { type_category: 'individual_tour', weekend_days: '' };
+                renderCalendar();
+            }
+        });
+    }
+
+    function startPolling() {
+        stopPolling();
+        pollInterval = setInterval(checkAvailability, 5000);
+    }
+
+    function stopPolling() {
+        if (pollInterval) {
+            clearInterval(pollInterval);
+            pollInterval = null;
+        }
+    }
+
+    function checkAvailability() {
+        const typeId = $('#bt-type-id').val();
+        if (!typeId) return;
+        
+        $.post(btFrontend.ajaxUrl, {
+            action: 'bt_check_availability',
+            type_id: typeId,
+            date: selectedDate ? formatDate(selectedDate) : ''
+        }, function(response) {
+            if (response.success) {
+                // Update server time
+                serverTime = response.data.serverTime || serverTime;
+                serverDate = response.data.serverDate || serverDate;
+                
+                // Track if data changed
+                let hasChanges = false;
+                
+                if (typeData.type_category === 'hall') {
+                    if (selectedDate) {
+                        const dateStr = formatDate(selectedDate);
+                        const newBooked = response.data.bookedSlots || [];
+                        const currentBooked = bookedSlots[dateStr] || [];
+                        if (JSON.stringify(newBooked.sort()) !== JSON.stringify(currentBooked.sort())) {
+                            bookedSlots[dateStr] = newBooked;
+                            selectedSlots = selectedSlots.filter(id => !newBooked.includes(id));
+                            hasChanges = true;
+                            if (selectedSlots.length < newBooked.length) {
+                                showToast('Some slots were just booked', 'error');
+                            }
+                        }
+                    }
+                } else if (typeData.type_category === 'individual_tour') {
+                    // Update ticketsByDate from response
+                    const newTicketsByDate = response.data.ticketsByDate || {};
+                    if (JSON.stringify(newTicketsByDate) !== JSON.stringify(ticketsByDate)) {
+                        ticketsByDate = newTicketsByDate;
+                        hasChanges = true;
+                        
+                        if (selectedDate) {
+                            const dateStr = formatDate(selectedDate);
+                            const booked = ticketsByDate[dateStr] || 0;
+                            const totalCapacity = typeData.max_daily_capacity || 50;
+                            const maxAvailable = Math.max(0, totalCapacity - booked);
+                            
+                            if (ticketCount > maxAvailable) {
+                                ticketCount = Math.max(1, maxAvailable);
+                                showToast('Capacity updated. Tickets adjusted.', 'error');
+                            }
+                        }
+                    }
+                    
+                    // Update individual blocked dates
+                    const newIndividualBlocked = response.data.individualBlockedDates || [];
+                    if (JSON.stringify(newIndividualBlocked) !== JSON.stringify(individualBlockedDates)) {
+                        individualBlockedDates = newIndividualBlocked;
+                        hasChanges = true;
+                    }
+                } else if (typeData.type_category === 'event_tour') {
+                    // Update booked dates for event tour
+                    const newBookedDates = response.data.bookedDates || [];
+                    if (JSON.stringify(newBookedDates) !== JSON.stringify(bookedDates)) {
+                        bookedDates = newBookedDates;
+                        hasChanges = true;
+                        
+                        // If currently selected date got booked, clear selection
+                        if (selectedDate) {
+                            const dateStr = formatDate(selectedDate);
+                            if (newBookedDates.includes(dateStr)) {
+                                selectedDate = null;
+                                showToast('Selected date is now booked. Please choose another.', 'error');
+                            }
+                        }
+                    }
+                    
+                    // Update event blocked dates
+                    const newEventBlocked = response.data.eventBlockedDates || [];
+                    if (JSON.stringify(newEventBlocked) !== JSON.stringify(eventBlockedDates)) {
+                        eventBlockedDates = newEventBlocked;
+                        hasChanges = true;
+                    }
+                }
+                
+                // Re-render if data changed
+                if (hasChanges) {
+                    renderCalendar();
+                    if (typeData.type_category === 'hall') {
+                        renderSlots();
+                    } else {
+                        renderTourInfo();
+                    }
+                    updateUI();
+                }
+            }
+        });
+    }
+
+    function renderCalendar() {
+        const year = currentDate.getFullYear();
+        const month = currentDate.getMonth();
+        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+        $('#bt-month-year').text(monthNames[month] + ' ' + year);
+
+        const firstDay = new Date(year, month, 1).getDay();
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+
+        const weekendDays = typeData && typeData.weekend_days && typeData.weekend_days.trim() !== '' 
+            ? typeData.weekend_days.split(',').map(Number) 
+            : [];
+        const category = typeData ? typeData.type_category : 'hall';
+
+        let html = '';
+        for (let i = 0; i < firstDay; i++) {
+            html += '<div class="bt-day bt-day-empty"></div>';
+        }
+
+        // Parse server time for time-based availability check
+        const serverTimeParts = serverTime.split(':');
+        const serverHour = parseInt(serverTimeParts[0]) || 0;
+        const serverMinute = parseInt(serverTimeParts[1]) || 0;
+        const serverTimeMinutes = serverHour * 60 + serverMinute;
+
+        for (let day = 1; day <= daysInMonth; day++) {
+            const date = new Date(year, month, day);
+            const dayOfWeek = date.getDay();
+            const dateStr = formatDate(date);
+            const isPast = date < today;
+            const isWeekend = weekendDays.includes(dayOfWeek);
+            const isHoliday = holidays.includes(dateStr);
+            const isToday = date.toDateString() === today.toDateString();
+            const isSelected = selectedDate && date.toDateString() === selectedDate.toDateString();
+            
+            // Check cross-calendar blocking
+            let isBlockedByCross = false;
+            if (category === 'event_tour') {
+                isBlockedByCross = individualBlockedDates.includes(dateStr) || bookedDates.includes(dateStr);
+            } else if (category === 'individual_tour') {
+                isBlockedByCross = eventBlockedDates.includes(dateStr);
+                // Also check if capacity is full
+                const booked = ticketsByDate[dateStr] || 0;
+                if (typeData && booked >= typeData.max_daily_capacity) {
+                    isBlockedByCross = true;
+                }
+            }
+            
+            // Individual tour: only today and tomorrow selectable (NOT event tour)
+            let isBeyondTomorrow = false;
+            if (category === 'individual_tour' && date > tomorrow) {
+                isBeyondTomorrow = true;
+            }
+            
+            // Time-based availability check for Knowledge Hub tours (today only)
+            let isTimePassed = false;
+            if (isToday && typeData && (category === 'individual_tour' || category === 'event_tour')) {
+                const tourEndTime = typeData.tour_end_time || '17:00';
+                const endParts = tourEndTime.split(':');
+                const tourEndMinutes = parseInt(endParts[0]) * 60 + parseInt(endParts[1] || 0);
+                
+                // If current time has passed tour end time, mark as unavailable
+                if (serverTimeMinutes >= tourEndMinutes) {
+                    isTimePassed = true;
+                }
+            }
+            
+            const isDisabled = isPast || isWeekend || isHoliday || isBlockedByCross || isBeyondTomorrow || isTimePassed;
+
+            let classes = 'bt-day';
+            if (isDisabled) classes += ' bt-day-disabled';
+            if (isTimePassed && !isPast) classes += ' bt-day-time-passed';
+            if (isHoliday && !isPast) classes += ' bt-day-holiday';
+            if (isWeekend && !isPast && !isHoliday) classes += ' bt-day-weekend';
+            if (isToday && !isDisabled) classes += ' bt-day-today';
+            if (isSelected) classes += ' bt-day-selected';
+
+            html += '<div class="' + classes + '" data-date="' + dateStr + '">' + day + '</div>';
+        }
+
+        $('#bt-calendar-days').html(html);
+
+        $('#bt-calendar-days').off('click', '.bt-day').on('click', '.bt-day', function() {
+            if ($(this).hasClass('bt-day-disabled')) return;
+            
+            $('.bt-day').removeClass('bt-day-selected');
+            $(this).addClass('bt-day-selected');
+            
+            selectedDate = new Date($(this).data('date') + 'T00:00:00');
+            selectedSlots = [];
+            ticketCount = 1;
+            
+            if (typeData.type_category === 'hall') renderSlots();
+            else renderTourInfo();
+            
+            updateUI();
+            checkAvailability();
+        });
+    }
+
+    function renderSlots() {
+        const $container = $('#bt-slots-container');
+        
+        if (!selectedDate) {
+            $container.html('<div class="bt-placeholder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="48" height="48"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg><p>Select a date to view available slots</p></div>');
+            return;
+        }
+
+        if (!slots.length) {
+            $container.html('<div class="bt-placeholder"><p>No slots available</p></div>');
+            return;
+        }
+
+        const dateStr = formatDate(selectedDate);
+        const dateBookedSlots = bookedSlots[dateStr] || [];
+        const isToday = dateStr === serverDate;
+
+        let html = '<div class="bt-slots-list">';
+        slots.forEach(function(slot) {
+            const isBooked = dateBookedSlots.includes(parseInt(slot.id));
+            const isSelected = selectedSlots.includes(parseInt(slot.id));
+            
+            // Use JavaScript real-time for slot validation
+            let isPastSlot = false;
+            if (isToday) {
+                const now = new Date();
+                const currentMinutes = now.getHours() * 60 + now.getMinutes();
+                const [slotEndHour, slotEndMin] = slot.end_time.split(':').map(Number);
+                const slotEndMinutes = slotEndHour * 60 + slotEndMin;
+                isPastSlot = slotEndMinutes <= currentMinutes;
+            }
+            
+            const isDisabled = isBooked || isPastSlot;
+            
+            let classes = 'bt-slot-card';
+            if (isDisabled) classes += ' bt-slot-disabled';
+            if (isSelected && !isDisabled) classes += ' bt-slot-selected';
+            
+            html += '<div class="' + classes + '" data-id="' + slot.id + '" data-price="' + slot.price + '">';
+            html += '<div class="bt-slot-header"><span class="bt-slot-name">' + escapeHtml(slot.slot_name) + '</span></div>';
+            html += '<div class="bt-slot-time">' + formatTime12h(slot.start_time) + ' — ' + formatTime12h(slot.end_time) + '</div>';
+            if (isDisabled) {
+                html += '<div class="bt-slot-status">' + (isPastSlot ? 'Time Passed' : 'Unavailable') + '</div>';
+            }
+            html += '</div>';
+        });
+        html += '</div>';
+
+        $container.html(html);
+
+        $container.off('click', '.bt-slot-card').on('click', '.bt-slot-card', function() {
+            if ($(this).hasClass('bt-slot-disabled')) return;
+            
+            const slotId = parseInt($(this).data('id'));
+            const index = selectedSlots.indexOf(slotId);
+            
+            if (index > -1) {
+                selectedSlots.splice(index, 1);
+                $(this).removeClass('bt-slot-selected');
+            } else {
+                selectedSlots.push(slotId);
+                $(this).addClass('bt-slot-selected');
+            }
+            
+            updateUI();
+        });
+    }
+
+    function renderTourInfo() {
+        const $container = $('#bt-tour-details');
+        
+        if (!selectedDate) {
+            $container.html('<div class="bt-placeholder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="48" height="48"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg><p>Select a date to view tour details</p></div>');
+            return;
+        }
+
+        const dateStr = formatDate(selectedDate);
+        const category = typeData.type_category;
+        
+        // Check if tour time has passed for today
+        let isTimePassed = false;
+        const isToday = dateStr === serverDate;
+        if (isToday && typeData) {
+            const serverTimeParts = serverTime.split(':');
+            const serverHour = parseInt(serverTimeParts[0]) || 0;
+            const serverMinute = parseInt(serverTimeParts[1]) || 0;
+            const serverTimeMinutes = serverHour * 60 + serverMinute;
+            
+            const tourEndTime = typeData.tour_end_time || '17:00';
+            const endParts = tourEndTime.split(':');
+            const tourEndMinutes = parseInt(endParts[0]) * 60 + parseInt(endParts[1] || 0);
+            
+            if (serverTimeMinutes >= tourEndMinutes) {
+                isTimePassed = true;
+            }
+        }
+        
+        // If tour time has passed, show unavailable message
+        if (isTimePassed) {
+            let html = '<div class="bt-tour-info-card bt-tour-unavailable">';
+            html += '<div class="bt-tour-time"><strong>Tour Schedule</strong><span>' + formatTime12h(typeData.tour_start_time) + ' — ' + formatTime12h(typeData.tour_end_time) + '</span></div>';
+            html += '<div class="bt-unavailable-notice">';
+            html += '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>';
+            html += '<p>Tour time has passed for today. Please select another date.</p>';
+            html += '</div>';
+            html += '</div>';
+            $container.html(html);
+            return;
+        }
+        
+        let html = '<div class="bt-tour-info-card">';
+        html += '<div class="bt-tour-time"><strong>Tour Schedule</strong><span>' + formatTime12h(typeData.tour_start_time) + ' — ' + formatTime12h(typeData.tour_end_time) + '</span></div>';
+        
+        if (category === 'individual_tour') {
+            const booked = ticketsByDate[dateStr] || 0;
+            const totalCapacity = typeData.max_daily_capacity || 50;
+            const alreadyBooked = booked;
+            const maxAvailable = Math.max(0, totalCapacity - alreadyBooked);
+            
+            // Check if fully booked
+            if (maxAvailable <= 0) {
+                html += '<div class="bt-unavailable-notice">';
+                html += '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>';
+                html += '<p>This date is fully booked. Please select another date.</p>';
+                html += '</div>';
+                html += '</div>';
+                $container.html(html);
+                return;
+            }
+            
+            // Calculate: Remaining = Total capacity - Already booked - Currently selected
+            const displayRemaining = Math.max(0, totalCapacity - alreadyBooked - ticketCount);
+            html += '<div class="bt-ticket-selector">';
+            html += '<label>Number of Tickets</label>';
+            html += '<div class="bt-ticket-controls">';
+            html += '<button type="button" class="bt-ticket-btn" id="bt-ticket-minus">−</button>';
+            html += '<span class="bt-ticket-count" id="bt-ticket-display">' + ticketCount + '</span>';
+            html += '<button type="button" class="bt-ticket-btn" id="bt-ticket-plus">+</button>';
+            html += '</div>';
+            html += '</div>';
+			html += '<div class="bt-remaining-capacity"><strong>Available Tickets</strong><span class="bt-capacity-badge" id="bt-remaining-display">' + displayRemaining + ' remaining</span></div>';
+        }
+        
+        html += '</div>';
+        $container.html(html);
+        
+        // Ticket controls with real-time remaining update (only for individual tour)
+        if (category === 'individual_tour') {
+            const booked = ticketsByDate[dateStr] || 0;
+            const totalCapacity = typeData.max_daily_capacity || 50;
+            const alreadyBooked = booked;
+            const maxAvailable = Math.max(0, totalCapacity - alreadyBooked);
+            
+            function updateRemainingDisplay() {
+                // Remaining = Total - Already booked - Currently selected
+                const displayRemaining = Math.max(0, totalCapacity - alreadyBooked - ticketCount);
+                $('#bt-remaining-display').text(displayRemaining + ' remaining');
+            }
+            
+            $('#bt-ticket-minus').on('click', function() {
+                if (ticketCount > 1) {
+                    ticketCount--;
+                    $('#bt-ticket-display').text(ticketCount);
+                    updateRemainingDisplay();
+                    updateUI();
+                }
+            });
+            
+            $('#bt-ticket-plus').on('click', function() {
+                if (ticketCount < maxAvailable) {
+                    ticketCount++;
+                    $('#bt-ticket-display').text(ticketCount);
+                    updateRemainingDisplay();
+                    updateUI();
+                } else {
+                    showToast('Maximum ' + maxAvailable + ' tickets available', 'error');
+                }
+            });
+        }
+        
+        updateUI();
+    }
+
+    function updateUI() {
+        const category = $('#bt-type-category').val();
+        let showSummary = false;
+        let totalPrice = 0;
+        
+        if (category === 'hall' && selectedDate && selectedSlots.length > 0) {
+            showSummary = true;
+            let slotsHtml = '';
+            selectedSlots.forEach(function(slotId) {
+                const slot = slots.find(s => parseInt(s.id) === slotId);
+                if (slot) {
+                    const price = parseFloat(slot.price);
+                    totalPrice += price;
+                    slotsHtml += '<div class="bt-summary-slot"><span>' + escapeHtml(slot.slot_name) + '</span><span>BDT ' + price.toFixed(2) + '</span></div>';
+                }
+            });
+            
+            $('#bt-summary-content').html('<div class="bt-summary-date">' + formatDateLong(selectedDate) + '</div><div class="bt-summary-slots">' + slotsHtml + '</div>');
+        } else if ((category === 'event_tour' || category === 'individual_tour') && selectedDate) {
+            showSummary = true;
+            
+            if (category === 'event_tour') {
+                totalPrice = parseFloat(typeData.tour_price);
+                $('#bt-summary-content').html('<div class="bt-summary-date">' + formatDateLong(selectedDate) + '</div><div class="bt-summary-tour">Event Tour Booking</div>');
+            } else {
+                totalPrice = parseFloat(typeData.ticket_price) * ticketCount;
+                $('#bt-summary-content').html('<div class="bt-summary-date">' + formatDateLong(selectedDate) + '</div><div class="bt-summary-tour">' + ticketCount + ' ticket(s) × BDT ' + parseFloat(typeData.ticket_price).toFixed(2) + '</div>');
+            }
+        }
+        
+        if (showSummary) {
+            $('#bt-summary-total').html('<span>Total Amount</span><strong>BDT ' + totalPrice.toFixed(2) + '</strong>');
+            $('#bt-total-price').val(totalPrice);
+            $('#bt-ticket-count').val(ticketCount);
+            $('#bt-selected-date').val(formatDate(selectedDate));
+            $('#bt-selected-slots').val(selectedSlots.join(','));
+            $('#bt-summary').slideDown(300);
+            $('#bt-form-section').slideDown(300);
+        } else {
+            $('#bt-summary').slideUp(200);
+            $('#bt-form-section').slideUp(200);
+        }
+    }
+
+    function resetForm() {
+        selectedDate = null;
+        selectedSlots = [];
+        ticketCount = 1;
+        $('#bt-booking-form')[0].reset();
+        $('.bt-file-label span').text('Choose file (max 1MB)');
+        updateUI();
+        renderCalendar();
+        if (typeData.type_category === 'hall') renderSlots();
+        else renderTourInfo();
+        loadTypeData($('#bt-type-id').val());
+    }
+
+    // File upload label
+    $('#bt-payment-image').on('change', function() {
+        const fileName = this.files[0] ? this.files[0].name : 'Choose file (max 1MB)';
+        $('.bt-file-label span').text(fileName);
+    });
+
+    // Helper functions
+    function formatDate(date) {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return year + '-' + month + '-' + day;
+    }
+
+    function formatDateLong(date) {
+        if (typeof date === 'string') date = new Date(date + 'T00:00:00');
+        return date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+    }
+
+    function formatTime12h(time) {
+        if (!time) return '';
+        const [h, m] = time.split(':');
+        const hour = parseInt(h);
+        const ampm = hour >= 12 ? 'PM' : 'AM';
+        const hour12 = hour % 12 || 12;
+        return hour12 + ':' + m + ' ' + ampm;
+    }
+
+    function escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    function showToast(message, type) {
+        const $toast = $('#bt-toast');
+        $toast.removeClass('bt-toast-success bt-toast-error bt-toast-show').addClass('bt-toast-' + type + ' bt-toast-show').text(message);
+        setTimeout(function() { $toast.removeClass('bt-toast-show'); }, 4000);
+    }
+});

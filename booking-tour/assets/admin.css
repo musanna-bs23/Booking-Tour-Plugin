@@ -1,0 +1,878 @@
+/* Admin Styles - Premium Clean Design */
+:root {
+    --bt-brand: #8A4527;
+    --bt-brand-light: #A85A38;
+    --bt-brand-dark: #6E371F;
+    --bt-success: #059669;
+    --bt-error: #DC2626;
+    --bt-warning: #D97706;
+    --bt-text: #1F2937;
+    --bt-text-muted: #6B7280;
+    --bt-border: #E5E7EB;
+    --bt-bg: #F9FAFB;
+    --bt-bg-hover: #F3F4F6;
+}
+
+/* Base Layout */
+.bt-admin-wrap {
+    max-width: 1400px;
+    padding: 40px 30px;
+    background: white;
+    min-height: 100vh;
+}
+
+.bt-admin-wrap h1 {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--bt-text);
+    font-size: 26px;
+    font-weight: 700;
+    margin-bottom: 40px;
+    padding-bottom: 24px;
+    border-bottom: 1px solid var(--bt-border);
+}
+
+.bt-icon-title {
+    width: 28px;
+    height: 28px;
+    color: var(--bt-brand);
+}
+
+.bt-admin-wrap h2 {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--bt-text);
+    font-size: 16px;
+    font-weight: 600;
+    margin: 0 0 20px;
+}
+
+.bt-admin-wrap h2 svg {
+    color: var(--bt-brand);
+}
+
+.bt-page-description {
+    color: var(--bt-text-muted);
+    margin-bottom: 32px;
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+/* Settings Card */
+.bt-settings-card {
+    background: white;
+    border-radius: 16px;
+    padding: 32px;
+    margin-bottom: 32px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    border: 1px solid var(--bt-border);
+}
+
+.bt-hint {
+    color: var(--bt-text-muted);
+    font-size: 13px;
+    margin: 16px 0 24px;
+}
+
+/* Filters */
+.bt-filters {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 32px;
+    padding: 24px;
+    background: white;
+    border-radius: 16px;
+    border: 1px solid var(--bt-border);
+    align-items: center;
+}
+
+.bt-filter-group {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.bt-filter-icon {
+    position: absolute;
+    left: 14px;
+    width: 16px;
+    height: 16px;
+    color: var(--bt-text-muted);
+    pointer-events: none;
+}
+
+.bt-filters select {
+    padding: 12px 16px 12px 40px;
+    border: 1px solid var(--bt-border);
+    border-radius: 10px;
+    min-width: 160px;
+    font-size: 14px;
+    background: white;
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236B7280' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    padding-right: 36px;
+}
+
+.bt-filters select:focus {
+    border-color: var(--bt-brand);
+    outline: none;
+}
+
+.bt-filter-btn {
+    display: flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    background: var(--bt-brand) !important;
+    color: white !important;
+    border: none !important;
+    padding: 12px 24px !important;
+    border-radius: 10px !important;
+    font-weight: 500 !important;
+    cursor: pointer !important;
+    font-size: 14px !important;
+}
+
+.bt-filter-btn:hover {
+    background: var(--bt-brand-dark) !important;
+}
+
+/* Checkbox Group */
+.bt-checkbox-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.bt-day-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 18px;
+    background: var(--bt-bg);
+    border: 1px solid var(--bt-border);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 14px;
+}
+
+.bt-day-checkbox:hover {
+    border-color: var(--bt-brand);
+}
+
+.bt-day-checkbox:has(input:checked) {
+    background: var(--bt-brand);
+    border-color: var(--bt-brand);
+    color: white;
+}
+
+.bt-day-checkbox input {
+    accent-color: white;
+}
+
+/* Slot Form */
+.bt-slot-form {
+    display: flex;
+    align-items: flex-end;
+    gap: 16px;
+    margin-bottom: 28px;
+    flex-wrap: wrap;
+    padding: 24px;
+    background: var(--bt-bg);
+    border-radius: 12px;
+}
+
+.bt-slot-input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.bt-slot-input-group label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--bt-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.bt-slot-form input[type="text"],
+.bt-slot-form input[type="number"] {
+    padding: 12px 16px;
+    border: 1px solid var(--bt-border);
+    border-radius: 10px;
+    font-size: 14px;
+    width: 180px;
+    background: white;
+}
+
+.bt-slot-form input[type="time"] {
+    padding: 12px 16px;
+    border: 1px solid var(--bt-border);
+    border-radius: 10px;
+    font-size: 14px;
+    background: white;
+}
+
+.bt-slot-form input:focus {
+    border-color: var(--bt-brand);
+    outline: none;
+}
+
+.bt-add-slot-btn {
+    display: flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    background: var(--bt-brand) !important;
+    border-color: var(--bt-brand) !important;
+    padding: 12px 20px !important;
+    border-radius: 10px !important;
+    font-weight: 500 !important;
+}
+
+.bt-add-slot-btn:hover {
+    background: var(--bt-brand-dark) !important;
+    border-color: var(--bt-brand-dark) !important;
+}
+
+/* Bookings Card */
+.bt-bookings-card {
+    background: white;
+    border-radius: 16px;
+    border: 1px solid var(--bt-border);
+    overflow: hidden;
+}
+
+/* Tables */
+.bt-bookings-table,
+.bt-slots-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.bt-bookings-table thead th,
+.bt-slots-table thead th {
+    background: var(--bt-bg);
+    color: var(--bt-text-muted);
+    font-weight: 600;
+    padding: 16px 20px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--bt-border);
+    text-align: left;
+}
+
+.bt-bookings-table tbody td,
+.bt-slots-table tbody td {
+    padding: 18px 20px;
+    vertical-align: middle;
+    border-bottom: 1px solid var(--bt-border);
+    font-size: 14px;
+}
+
+.bt-bookings-table tbody tr:last-child td,
+.bt-slots-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.bt-bookings-table tbody tr:hover,
+.bt-slots-table tbody tr:hover {
+    background: var(--bt-bg-hover);
+}
+
+.bt-empty {
+    text-align: center;
+    color: var(--bt-text-muted);
+    padding: 60px 20px !important;
+}
+
+.bt-empty svg {
+    display: block;
+    margin: 0 auto 16px;
+}
+
+.bt-empty p {
+    margin: 0;
+}
+
+.bt-empty-small {
+    text-align: center;
+    color: var(--bt-text-muted);
+    padding: 24px;
+    font-size: 14px;
+}
+
+/* Badges */
+.bt-id-badge {
+    display: inline-block;
+    background: var(--bt-bg);
+    color: var(--bt-text-muted);
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.bt-room-badge {
+    display: inline-block;
+    background: var(--bt-brand);
+    background: linear-gradient(135deg, var(--bt-brand), var(--bt-brand-light));
+    color: white;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.bt-price {
+    font-weight: 600;
+    color: var(--bt-text);
+}
+
+.bt-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.bt-badge-pending {
+    background: #FEF3C7;
+    color: #92400E;
+}
+
+.bt-badge-approved {
+    background: #D1FAE5;
+    color: #065F46;
+}
+
+/* Action Buttons */
+.bt-actions {
+    white-space: nowrap;
+    display: flex;
+    gap: 8px;
+}
+
+.bt-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.bt-btn-view {
+    background: var(--bt-bg);
+    color: var(--bt-text);
+    padding: 10px;
+}
+
+.bt-btn-view:hover {
+    background: var(--bt-brand);
+    color: white;
+}
+
+.bt-btn-approve {
+    background: var(--bt-success);
+    color: white;
+}
+
+.bt-btn-approve:hover {
+    background: #047857;
+}
+
+.bt-btn-reject {
+    background: var(--bt-error);
+    color: white;
+}
+
+.bt-btn-reject:hover {
+    background: #B91C1C;
+}
+
+.bt-btn-delete {
+    background: var(--bt-bg);
+    color: var(--bt-text-muted);
+}
+
+.bt-btn-delete:hover {
+    background: var(--bt-error);
+    color: white;
+}
+
+/* Save Button */
+.bt-save-btn {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    background: var(--bt-brand) !important;
+    border-color: var(--bt-brand) !important;
+    padding: 12px 28px !important;
+    font-weight: 500 !important;
+    border-radius: 10px !important;
+}
+
+.bt-save-btn:hover {
+    background: var(--bt-brand-dark) !important;
+    border-color: var(--bt-brand-dark) !important;
+}
+
+/* Messages */
+.bt-message {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 16px 24px;
+    border-radius: 12px;
+    margin-bottom: 24px;
+    font-weight: 500;
+    font-size: 14px;
+}
+
+.bt-message-success {
+    background: #D1FAE5;
+    color: #065F46;
+}
+
+.bt-message-error {
+    background: #FEE2E2;
+    color: #991B1B;
+}
+
+/* Holiday Management */
+.bt-holiday-container {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    gap: 32px;
+}
+
+@media (max-width: 900px) {
+    .bt-holiday-container {
+        grid-template-columns: 1fr;
+    }
+}
+
+.bt-holiday-calendar-section {
+    background: white;
+    border-radius: 16px;
+    padding: 32px;
+    border: 1px solid var(--bt-border);
+}
+
+.bt-holiday-list-section {
+    background: white;
+    border-radius: 16px;
+    padding: 28px;
+    border: 1px solid var(--bt-border);
+}
+
+.bt-holiday-list-section h3 {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 15px;
+    font-weight: 600;
+    margin: 0 0 24px;
+    color: var(--bt-text);
+}
+
+.bt-holiday-list-section h3 svg {
+    color: var(--bt-brand);
+}
+
+.bt-holiday-items {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.bt-holiday-items li {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--bt-border);
+    font-size: 13px;
+    color: var(--bt-text);
+}
+
+.bt-holiday-items li svg {
+    color: var(--bt-brand);
+}
+
+.bt-holiday-items li:last-child {
+    border-bottom: none;
+}
+
+.bt-calendar-nav {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 28px;
+}
+
+.bt-calendar-nav span {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--bt-text);
+}
+
+.bt-nav-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    height: 42px;
+    border: 1px solid var(--bt-border);
+    background: white;
+    border-radius: 10px;
+    cursor: pointer;
+    color: var(--bt-text);
+    transition: all 0.2s;
+}
+
+.bt-nav-btn:hover {
+    background: var(--bt-brand);
+    color: white;
+    border-color: var(--bt-brand);
+}
+
+.bt-calendar-weekdays {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    margin-bottom: 12px;
+}
+
+.bt-calendar-weekdays span {
+    text-align: center;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--bt-text-muted);
+    padding: 12px 0;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+#bt-holiday-calendar,
+.bt-calendar-days {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 6px;
+}
+
+.bt-holiday-day {
+    aspect-ratio: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    color: var(--bt-text);
+}
+
+.bt-holiday-day:hover:not(.bt-day-empty) {
+    background: var(--bt-bg-hover);
+}
+
+.bt-holiday-day.bt-day-holiday {
+    background: var(--bt-brand);
+    color: white;
+    font-weight: 600;
+}
+
+.bt-holiday-day.bt-day-holiday:hover {
+    background: var(--bt-brand-dark);
+}
+
+.bt-holiday-day.bt-day-empty {
+    cursor: default;
+}
+
+/* Tour Settings Grid Fix */
+.bt-tour-settings-form .bt-input-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 20px;
+    margin-bottom: 20px;
+}
+
+.bt-tour-settings-form .bt-input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.bt-tour-settings-form .bt-input-group label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--bt-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.bt-tour-settings-form .bt-input-group input {
+    padding: 12px 16px;
+    border: 1px solid var(--bt-border);
+    border-radius: 10px;
+    font-size: 14px;
+    background: white;
+}
+
+.bt-tour-settings-form .bt-input-group input:focus {
+    border-color: var(--bt-brand);
+    outline: none;
+}
+
+.bt-save-tour-btn {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    background: var(--bt-brand) !important;
+    border-color: var(--bt-brand) !important;
+    padding: 12px 24px !important;
+    border-radius: 10px !important;
+    font-weight: 500 !important;
+    margin-top: 8px !important;
+}
+
+/* Modal Styles */
+.bt-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 100000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.bt-modal-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0,0,0,0.5);
+}
+
+.bt-modal-container {
+    position: relative;
+    background: white;
+    border-radius: 16px;
+    width: 90%;
+    max-width: 600px;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+}
+
+.bt-modal-sm {
+    max-width: 400px;
+}
+
+.bt-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 24px 28px;
+    border-bottom: 1px solid var(--bt-border);
+}
+
+.bt-modal-header h3 {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--bt-text);
+}
+
+.bt-modal-header h3 svg {
+    color: var(--bt-brand);
+}
+
+.bt-modal-close {
+    width: 36px;
+    height: 36px;
+    border: none;
+    background: var(--bt-bg);
+    border-radius: 8px;
+    font-size: 20px;
+    cursor: pointer;
+    color: var(--bt-text-muted);
+    transition: all 0.2s;
+}
+
+.bt-modal-close:hover {
+    background: var(--bt-error);
+    color: white;
+}
+
+.bt-modal-body {
+    padding: 28px;
+}
+
+.bt-modal-date {
+    text-align: center;
+    font-size: 15px;
+    color: var(--bt-text);
+    margin-bottom: 24px;
+    font-weight: 500;
+}
+
+.bt-modal-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+}
+
+.bt-modal-actions button {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    padding: 12px 20px !important;
+    border-radius: 10px !important;
+    font-weight: 500 !important;
+}
+
+.bt-brand-btn {
+    background: var(--bt-brand) !important;
+    border-color: var(--bt-brand) !important;
+}
+
+/* Detail Grid */
+.bt-detail-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+}
+
+@media (max-width: 600px) {
+    .bt-detail-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.bt-detail-section {
+    background: var(--bt-bg);
+    border-radius: 12px;
+    padding: 20px;
+}
+
+.bt-detail-full {
+    grid-column: 1 / -1;
+}
+
+.bt-detail-section h4 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 16px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--bt-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.bt-detail-section h4 svg {
+    color: var(--bt-brand);
+}
+
+.bt-detail-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--bt-border);
+    font-size: 14px;
+}
+
+.bt-detail-row:last-child {
+    border-bottom: none;
+}
+
+.bt-detail-row span:first-child {
+    color: var(--bt-text-muted);
+}
+
+.bt-detail-row a {
+    color: var(--bt-brand);
+}
+
+.bt-price-lg {
+    color: var(--bt-brand) !important;
+    font-size: 18px !important;
+}
+
+.bt-slots-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.bt-slot-detail {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    background: white;
+    border-radius: 8px;
+    border: 1px solid var(--bt-border);
+}
+
+.bt-slot-detail .bt-slot-name {
+    font-weight: 600;
+    color: var(--bt-text);
+}
+
+.bt-slot-detail .bt-slot-time {
+    color: var(--bt-text-muted);
+    font-size: 13px;
+}
+
+.bt-image-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--bt-brand);
+    font-weight: 500;
+}
+
+.bt-notes {
+    margin: 0;
+    font-size: 14px;
+    color: var(--bt-text);
+    line-height: 1.6;
+}
+
+code {
+    background: white;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    color: var(--bt-brand);
+    border: 1px solid var(--bt-border);
+}
