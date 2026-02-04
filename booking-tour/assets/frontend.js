@@ -21,6 +21,8 @@ jQuery(document).ready(function($) {
     let individualBlockedDates = [];
     let serverTime = btFrontend.serverTime || '00:00';
     let serverDate = btFrontend.serverDate || '';
+    let sharedTourStartTime = '';
+    let sharedTourEndTime = '';
     let pollInterval = null;
     let ticketCount = 1;
     let mode = $('.bt-booking-container').data('mode');
@@ -164,6 +166,8 @@ jQuery(document).ready(function($) {
                     individualBlockedDates = response.data.individualBlockedDates || [];
                     serverTime = response.data.serverTime || '00:00';
                     serverDate = response.data.serverDate || '';
+                    sharedTourStartTime = response.data.sharedTourStartTime || '';
+                    sharedTourEndTime = response.data.sharedTourEndTime || '';
                     
                     toggleSections();
                     renderCalendar();
@@ -354,26 +358,32 @@ jQuery(document).ready(function($) {
                 }
             }
             
-            // Individual tour: only today and tomorrow selectable (NOT event tour)
-            let isBeyondTomorrow = false;
-            if (category === 'individual_tour' && date > tomorrow) {
-                isBeyondTomorrow = true;
+        // Individual tour booking window (admin configurable)
+        let isBeyondWindow = false;
+        if (category === 'individual_tour') {
+            const mode = (typeData && typeData.booking_window_mode) ? typeData.booking_window_mode : 'limit';
+            const days = (typeData && typeof typeData.booking_window_days !== 'undefined') ? parseInt(typeData.booking_window_days) : 1;
+            if (mode === 'limit') {
+                const windowEnd = new Date(today);
+                windowEnd.setDate(windowEnd.getDate() + Math.max(0, days));
+                if (date > windowEnd) isBeyondWindow = true;
             }
+        }
             
-            // Time-based availability check for Knowledge Hub tours (today only)
-            let isTimePassed = false;
-            if (isToday && typeData && (category === 'individual_tour' || category === 'event_tour')) {
-                const tourEndTime = typeData.tour_end_time || '17:00';
-                const endParts = tourEndTime.split(':');
-                const tourEndMinutes = parseInt(endParts[0]) * 60 + parseInt(endParts[1] || 0);
+        // Time-based availability check for Knowledge Hub tours (today only)
+        let isTimePassed = false;
+        if (isToday && typeData && (category === 'individual_tour' || category === 'event_tour')) {
+            const tourStartTime = getSharedTourStartTime() || typeData.tour_start_time || '00:00';
+            const startParts = tourStartTime.split(':');
+            const tourStartMinutes = parseInt(startParts[0]) * 60 + parseInt(startParts[1] || 0);
                 
-                // If current time has passed tour end time, mark as unavailable
-                if (serverTimeMinutes >= tourEndMinutes) {
-                    isTimePassed = true;
-                }
+            // If current time has reached tour start time, mark as unavailable
+            if (serverTimeMinutes >= tourStartMinutes) {
+                isTimePassed = true;
             }
+        }
             
-            const isDisabled = isPast || isWeekend || isHoliday || isBlockedByCross || isBeyondTomorrow || isTimePassed;
+        const isDisabled = isPast || isWeekend || isHoliday || isBlockedByCross || isBeyondWindow || isTimePassed;
 
             let classes = 'bt-day';
             if (isDisabled) classes += ' bt-day-disabled';
@@ -525,11 +535,11 @@ jQuery(document).ready(function($) {
             const serverMinute = parseInt(serverTimeParts[1]) || 0;
             const serverTimeMinutes = serverHour * 60 + serverMinute;
             
-            const tourEndTime = typeData.tour_end_time || '17:00';
-            const endParts = tourEndTime.split(':');
-            const tourEndMinutes = parseInt(endParts[0]) * 60 + parseInt(endParts[1] || 0);
+            const tourStartTime = getSharedTourStartTime() || typeData.tour_start_time || '00:00';
+            const startParts = tourStartTime.split(':');
+            const tourStartMinutes = parseInt(startParts[0]) * 60 + parseInt(startParts[1] || 0);
             
-            if (serverTimeMinutes >= tourEndMinutes) {
+            if (serverTimeMinutes >= tourStartMinutes) {
                 isTimePassed = true;
             }
         }
@@ -711,6 +721,10 @@ jQuery(document).ready(function($) {
         const ampm = hour >= 12 ? 'PM' : 'AM';
         const hour12 = hour % 12 || 12;
         return hour12 + ':' + m + ' ' + ampm;
+    }
+
+    function getSharedTourStartTime() {
+        return sharedTourStartTime;
     }
 
     function timeToMinutes(time) {

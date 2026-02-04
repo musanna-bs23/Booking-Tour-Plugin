@@ -459,6 +459,11 @@ class BookingTour {
             </div>
             
             <?php elseif ($type->type_category === 'individual_tour'): ?>
+            <?php
+                $booking_window_mode = get_option('bt_individual_booking_window_mode_' . $type->id, 'limit');
+                $booking_window_days = intval(get_option('bt_individual_booking_window_days_' . $type->id, 1));
+                if ($booking_window_days < 0) $booking_window_days = 0;
+            ?>
             <!-- Individual Tour Settings -->
             <div class="bt-settings-card">
                 <h2>
@@ -491,6 +496,19 @@ class BookingTour {
                         <div class="bt-input-group">
                             <label>Ticket Price (BDT / per unit)</label>
                             <input type="number" id="bt-ticket-price" value="<?php echo esc_attr($type->ticket_price); ?>" min="0" step="0.01">
+                        </div>
+                    </div>
+                    <div class="bt-input-row">
+                        <div class="bt-input-group">
+                            <label>Booking Window</label>
+                            <select id="bt-booking-window-mode">
+                                <option value="none" <?php selected($booking_window_mode, 'none'); ?>>No limit (book any future date)</option>
+                                <option value="limit" <?php selected($booking_window_mode, 'limit'); ?>>Limit to X days ahead</option>
+                            </select>
+                        </div>
+                        <div class="bt-input-group">
+                            <label>Days Ahead (X)</label>
+                            <input type="number" id="bt-booking-window-days" value="<?php echo esc_attr($booking_window_days); ?>" min="0">
                         </div>
                     </div>
                     <button class="button button-primary bt-save-tour-btn" id="bt-save-tour" data-type-id="<?php echo esc_attr($type->id); ?>">
@@ -730,6 +748,16 @@ class BookingTour {
             $format[] = '%f';
         }
 
+        if (isset($_POST['booking_window_mode'])) {
+            $mode = sanitize_text_field($_POST['booking_window_mode']);
+            if ($mode !== 'none') $mode = 'limit';
+            update_option('bt_individual_booking_window_mode_' . $type_id, $mode, false);
+        }
+        if (isset($_POST['booking_window_days'])) {
+            $days = max(0, intval($_POST['booking_window_days']));
+            update_option('bt_individual_booking_window_days_' . $type_id, $days, false);
+        }
+
         if (!empty($data)) {
             $wpdb->update(
                 $wpdb->prefix . 'bt_booking_types',
@@ -751,6 +779,10 @@ class BookingTour {
             "SELECT * FROM {$wpdb->prefix}bt_booking_types WHERE id = %d",
             $type_id
         ));
+        if ($type && $type->type_category === 'individual_tour') {
+            $type->booking_window_mode = get_option('bt_individual_booking_window_mode_' . $type_id, 'limit');
+            $type->booking_window_days = intval(get_option('bt_individual_booking_window_days_' . $type_id, 1));
+        }
 
         // Get slots (only for hall)
         $slots = array();
@@ -805,6 +837,19 @@ class BookingTour {
         // Also get event tour bookings to check for date conflicts
         $event_type = $wpdb->get_row("SELECT id FROM {$wpdb->prefix}bt_booking_types WHERE type_category = 'event_tour'");
         $individual_type = $wpdb->get_row("SELECT id FROM {$wpdb->prefix}bt_booking_types WHERE type_category = 'individual_tour'");
+        $shared_tour_start_time = '';
+        $shared_tour_end_time = '';
+        if ($type && ($type->type_category === 'event_tour' || $type->type_category === 'individual_tour')) {
+            $event_time = $wpdb->get_row("SELECT tour_start_time, tour_end_time FROM {$wpdb->prefix}bt_booking_types WHERE type_category = 'event_tour'");
+            $individual_time = $wpdb->get_row("SELECT tour_start_time, tour_end_time FROM {$wpdb->prefix}bt_booking_types WHERE type_category = 'individual_tour'");
+            if ($event_time && $event_time->tour_start_time) {
+                $shared_tour_start_time = $event_time->tour_start_time;
+                $shared_tour_end_time = $event_time->tour_end_time;
+            } elseif ($individual_time && $individual_time->tour_start_time) {
+                $shared_tour_start_time = $individual_time->tour_start_time;
+                $shared_tour_end_time = $individual_time->tour_end_time;
+            }
+        }
         
         $eventBlockedDates = array();
         $individualBlockedDates = array();
@@ -841,6 +886,8 @@ class BookingTour {
             'ticketsByDate' => $ticketsByDate,
             'eventBlockedDates' => $eventBlockedDates,
             'individualBlockedDates' => $individualBlockedDates,
+            'sharedTourStartTime' => $shared_tour_start_time,
+            'sharedTourEndTime' => $shared_tour_end_time,
             'serverTime' => current_time('H:i'),
             'serverDate' => current_time('Y-m-d')
         ));
@@ -880,6 +927,10 @@ class BookingTour {
         
         $dateBlockedByEvent = false;
         $dateBlockedByIndividual = false;
+        $eventBlockedDates = array();
+        $individualBlockedDates = array();
+        $bookedDates = array();
+        $ticketsByDate = array();
         
         if ($event_type) {
             $event_booking = $wpdb->get_var($wpdb->prepare(
@@ -888,6 +939,11 @@ class BookingTour {
                 $event_type->id, $date
             ));
             $dateBlockedByEvent = $event_booking > 0;
+            $eventBlockedDates = $wpdb->get_col($wpdb->prepare(
+                "SELECT DISTINCT booking_date FROM {$wpdb->prefix}bt_bookings 
+                 WHERE booking_type_id = %d AND status IN ('pending', 'approved') AND booking_date >= CURDATE()",
+                $event_type->id
+            ));
         }
         
         if ($individual_type) {
@@ -897,6 +953,31 @@ class BookingTour {
                 $individual_type->id, $date
             ));
             $dateBlockedByIndividual = $individual_booking > 0;
+            $individualBlockedDates = $wpdb->get_col($wpdb->prepare(
+                "SELECT DISTINCT booking_date FROM {$wpdb->prefix}bt_bookings 
+                 WHERE booking_type_id = %d AND status IN ('pending', 'approved') AND booking_date >= CURDATE()",
+                $individual_type->id
+            ));
+        }
+
+        if ($type && $type->type_category === 'event_tour') {
+            $bookedDates = $wpdb->get_col($wpdb->prepare(
+                "SELECT DISTINCT booking_date FROM {$wpdb->prefix}bt_bookings 
+                 WHERE booking_type_id = %d AND status IN ('pending', 'approved') AND booking_date >= CURDATE()",
+                $type_id
+            ));
+        }
+
+        if ($type && $type->type_category === 'individual_tour') {
+            $ticket_rows = $wpdb->get_results($wpdb->prepare(
+                "SELECT booking_date, SUM(ticket_count) AS total_tickets FROM {$wpdb->prefix}bt_bookings
+                 WHERE booking_type_id = %d AND status IN ('pending', 'approved') AND booking_date >= CURDATE()
+                 GROUP BY booking_date",
+                $type_id
+            ));
+            foreach ($ticket_rows as $row) {
+                $ticketsByDate[$row->booking_date] = intval($row->total_tickets);
+            }
         }
 
         wp_send_json_success(array(
@@ -905,6 +986,10 @@ class BookingTour {
             'remainingCapacity' => $type->max_daily_capacity - $totalTickets,
             'dateBlockedByEvent' => $dateBlockedByEvent,
             'dateBlockedByIndividual' => $dateBlockedByIndividual,
+            'eventBlockedDates' => $eventBlockedDates,
+            'individualBlockedDates' => $individualBlockedDates,
+            'bookedDates' => $bookedDates,
+            'ticketsByDate' => $ticketsByDate,
             'serverTime' => current_time('H:i'),
             'serverDate' => current_time('Y-m-d')
         ));
@@ -968,6 +1053,18 @@ class BookingTour {
         // Validate slots for hall booking
         if ($type->type_category === 'hall' && empty($slot_ids)) {
             wp_send_json_error('Please select at least one slot');
+        }
+
+        if ($type->type_category === 'individual_tour') {
+            $mode = get_option('bt_individual_booking_window_mode_' . $type_id, 'limit');
+            $days = intval(get_option('bt_individual_booking_window_days_' . $type_id, 1));
+            if ($mode === 'limit') {
+                $today = current_time('Y-m-d');
+                $max_date = date('Y-m-d', strtotime($today . ' +' . max(0, $days) . ' days'));
+                if ($booking_date > $max_date) {
+                    wp_send_json_error('Booking is only available up to ' . $days . ' day(s) in advance.');
+                }
+            }
         }
 
         // Handle file upload

@@ -72,6 +72,8 @@ jQuery(document).ready(function($) {
         if ($('#bt-tour-price').length) data.tour_price = $('#bt-tour-price').val();
         if ($('#bt-max-capacity').length) data.max_daily_capacity = $('#bt-max-capacity').val();
         if ($('#bt-ticket-price').length) data.ticket_price = $('#bt-ticket-price').val();
+        if ($('#bt-booking-window-mode').length) data.booking_window_mode = $('#bt-booking-window-mode').val();
+        if ($('#bt-booking-window-days').length) data.booking_window_days = $('#bt-booking-window-days').val();
 
         $.post(btAdmin.ajaxUrl, data, function(response) {
             if (response.success) showMessage('Tour settings saved!', 'success');
