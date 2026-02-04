@@ -329,11 +329,13 @@ jQuery(document).ready(function($) {
             html += '<div class="bt-day bt-day-empty"></div>';
         }
 
-        // Parse server time for time-based availability check
+        // Parse server time for time-based availability check (tours)
         const serverTimeParts = serverTime.split(':');
         const serverHour = parseInt(serverTimeParts[0]) || 0;
         const serverMinute = parseInt(serverTimeParts[1]) || 0;
         const serverTimeMinutes = serverHour * 60 + serverMinute;
+        const localNow = new Date();
+        const localTimeMinutes = localNow.getHours() * 60 + localNow.getMinutes();
 
         for (let day = 1; day <= daysInMonth; day++) {
             const date = new Date(year, month, day);
@@ -358,32 +360,37 @@ jQuery(document).ready(function($) {
                 }
             }
             
-        // Individual tour booking window (admin configurable)
-        let isBeyondWindow = false;
-        if (category === 'individual_tour') {
-            const mode = (typeData && typeData.booking_window_mode) ? typeData.booking_window_mode : 'limit';
-            const days = (typeData && typeof typeData.booking_window_days !== 'undefined') ? parseInt(typeData.booking_window_days) : 1;
-            if (mode === 'limit') {
-                const windowEnd = new Date(today);
-                windowEnd.setDate(windowEnd.getDate() + Math.max(0, days));
-                if (date > windowEnd) isBeyondWindow = true;
+            // Individual tour booking window (admin configurable)
+            let isBeyondWindow = false;
+            if (category === 'individual_tour') {
+                const mode = (typeData && typeData.booking_window_mode) ? typeData.booking_window_mode : 'limit';
+                const days = (typeData && typeof typeData.booking_window_days !== 'undefined') ? parseInt(typeData.booking_window_days) : 1;
+                if (mode === 'limit') {
+                    const windowEnd = new Date(today);
+                    windowEnd.setDate(windowEnd.getDate() + Math.max(0, days));
+                    if (date > windowEnd) isBeyondWindow = true;
+                }
             }
-        }
-            
-        // Time-based availability check for Knowledge Hub tours (today only)
-        let isTimePassed = false;
-        if (isToday && typeData && (category === 'individual_tour' || category === 'event_tour')) {
-            const tourStartTime = getSharedTourStartTime() || typeData.tour_start_time || '00:00';
-            const startParts = tourStartTime.split(':');
-            const tourStartMinutes = parseInt(startParts[0]) * 60 + parseInt(startParts[1] || 0);
-                
-            // If current time has reached tour start time, mark as unavailable
-            if (serverTimeMinutes >= tourStartMinutes) {
-                isTimePassed = true;
+
+            // Time-based availability check for Knowledge Hub tours (today only)
+            let isTimePassed = false;
+            if (isToday && typeData && (category === 'individual_tour' || category === 'event_tour')) {
+                const tourStartTime = getSharedTourStartTime() || typeData.tour_start_time || '00:00';
+                const startParts = tourStartTime.split(':');
+                const tourStartMinutes = parseInt(startParts[0]) * 60 + parseInt(startParts[1] || 0);
+
+                // If current time has reached tour start time, mark as unavailable
+                if (serverTimeMinutes >= tourStartMinutes) {
+                    isTimePassed = true;
+                }
             }
-        }
-            
-        const isDisabled = isPast || isWeekend || isHoliday || isBlockedByCross || isBeyondWindow || isTimePassed;
+
+            let isNoHallAvailabilityToday = false;
+            if (category === 'hall' && isToday) {
+                isNoHallAvailabilityToday = !hasBookableHallSlots(dateStr, localTimeMinutes);
+            }
+
+            const isDisabled = isPast || isWeekend || isHoliday || isBlockedByCross || isBeyondWindow || isTimePassed || isNoHallAvailabilityToday;
 
             let classes = 'bt-day';
             if (isDisabled) classes += ' bt-day-disabled';
@@ -431,11 +438,9 @@ jQuery(document).ready(function($) {
 
         const dateStr = formatDate(selectedDate);
         const dateBookedSlots = bookedSlots[dateStr] || [];
-        const isToday = dateStr === serverDate;
-        const serverTimeParts = serverTime.split(':');
-        const serverHour = parseInt(serverTimeParts[0]) || 0;
-        const serverMinute = parseInt(serverTimeParts[1]) || 0;
-        const serverTimeMinutes = serverHour * 60 + serverMinute;
+        const localNow = new Date();
+        const isTodayLocal = dateStr === formatDate(localNow);
+        const localTimeMinutes = localNow.getHours() * 60 + localNow.getMinutes();
 
         const bookedIntervals = dateBookedSlots.map(function(slotId) {
             const slot = slots.find(s => parseInt(s.id) === parseInt(slotId));
@@ -469,8 +474,8 @@ jQuery(document).ready(function($) {
 
             // Live time restriction: disable if current time >= slot start time
             let isPastSlot = false;
-            if (isToday) {
-                isPastSlot = serverTimeMinutes >= slotStart;
+            if (isTodayLocal) {
+                isPastSlot = localTimeMinutes >= slotStart;
             }
             
             const isDisabled = isBooked || isOverlapBooked || isPastSlot;
@@ -725,6 +730,38 @@ jQuery(document).ready(function($) {
 
     function getSharedTourStartTime() {
         return sharedTourStartTime;
+    }
+
+    function hasBookableHallSlots(dateStr, serverTimeMinutes) {
+        if (!slots.length) return false;
+        const dateBookedSlots = bookedSlots[dateStr] || [];
+        const bookedIntervals = dateBookedSlots.map(function(slotId) {
+            const slot = slots.find(s => parseInt(s.id) === parseInt(slotId));
+            if (!slot) return null;
+            return {
+                start: timeToMinutes(slot.start_time),
+                end: timeToMinutes(slot.end_time)
+            };
+        }).filter(Boolean);
+
+        return slots.some(function(slot) {
+            const slotId = parseInt(slot.id);
+            const slotStart = timeToMinutes(slot.start_time);
+            const slotEnd = timeToMinutes(slot.end_time);
+            const isBooked = dateBookedSlots.includes(slotId);
+            let isOverlapBooked = false;
+            if (!isBooked && bookedIntervals.length) {
+                for (let i = 0; i < bookedIntervals.length; i++) {
+                    const interval = bookedIntervals[i];
+                    if (intervalsOverlap(slotStart, slotEnd, interval.start, interval.end)) {
+                        isOverlapBooked = true;
+                        break;
+                    }
+                }
+            }
+            const isPastSlot = serverTimeMinutes >= slotStart;
+            return !(isBooked || isOverlapBooked || isPastSlot);
+        });
     }
 
     function timeToMinutes(time) {
