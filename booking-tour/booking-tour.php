@@ -2052,20 +2052,23 @@ class BookingTour {
                 <div class="bt-summary-total" id="bt-summary-total"></div>
                 
                 <div class="bt-terms-section">
-                    <a href="http://35.240.207.116/knowledgehub/wordpress/?page_id=1031" target="_blank" class="bt-terms-link">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                            <polyline points="14 2 14 8 20 8"></polyline>
-                        </svg>
-                        Terms & Conditions
-                    </a>
-                    <a href="http://35.240.207.116/knowledgehub/wordpress/?page_id=1607" target="_blank" class="bt-terms-link">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-                            <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
-                            <line x1="1" y1="10" x2="23" y2="10"></line>
-                        </svg>
-                        Payment Rules & Regulations
-                    </a>
+                    <p class="bt-terms-text">
+                        Please take a moment to review our
+                        <a href="http://35.240.207.116/knowledgehub/wordpress/?page_id=1031" target="_blank" class="bt-terms-link">terms and conditions</a>
+                        and
+                        <a href="http://35.240.207.116/knowledgehub/wordpress/?page_id=1607" target="_blank" class="bt-terms-link">Payment Rules & Regulations</a>
+                        before proceeding to your booking. Your understanding and agreement are appreciated.
+                    </p>
+                    <div class="bt-rules-panel">
+                        <h4>Some more important rules & regulation</h4>
+                        <p>Smoking and vaping are prohibited at all times within the Knowledge Hub premises.</p>
+                        <p>Consumption of food and beverages is restricted to the Kitchen and Terrace area only.</p>
+                        <p>Food and beverages are strictly prohibited inside the Knowledge Hub.</p>
+                    </div>
+                    <label class="bt-agree">
+                        <input type="checkbox" id="bt-agree-terms">
+                        <span>I agree to the Terms &amp; Conditions and confirm that I understand and accept the Payment Rules &amp; Regulations.</span>
+                    </label>
                 </div>
             </div>
 

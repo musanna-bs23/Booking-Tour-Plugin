@@ -593,6 +593,69 @@
     background: white;
 }
 
+.bt-addons-section + .bt-summary {
+    margin-top: 24px;
+}
+
+.bt-terms-section {
+    margin-top: 20px;
+    display: grid;
+    gap: 16px;
+}
+
+.bt-terms-text {
+    margin: 0;
+    font-size: 14px;
+    color: var(--bt-text-muted);
+    line-height: 1.6;
+}
+
+.bt-terms-link {
+    color: var(--bt-brand);
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.bt-terms-link:hover {
+    text-decoration: underline;
+}
+
+.bt-rules-panel {
+    border: 1px solid var(--bt-border);
+    border-radius: 12px;
+    padding: 16px;
+    background: var(--bt-bg);
+}
+
+.bt-rules-panel h4 {
+    margin: 0 0 12px 0;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--bt-text);
+}
+
+.bt-rules-panel p {
+    margin: 0 0 8px 0;
+    font-size: 13px;
+    color: var(--bt-text-muted);
+}
+
+.bt-rules-panel p:last-child {
+    margin-bottom: 0;
+}
+
+.bt-agree {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    font-size: 13px;
+    color: var(--bt-text);
+}
+
+.bt-agree input {
+    margin-top: 2px;
+}
+
 .bt-summary-info {
     margin-bottom: 24px;
     padding-bottom: 20px;

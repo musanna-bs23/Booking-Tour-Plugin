@@ -123,6 +123,11 @@ jQuery(document).ready(function($) {
             return;
         }
 
+        if (!$('#bt-agree-terms').is(':checked')) {
+            showToast('Please agree to the Terms & Conditions and Payment Rules & Regulations', 'error');
+            return;
+        }
+
         if (paymentImage && paymentImage.size > btFrontend.maxUploadSize) {
             showToast('Payment image must be less than 1MB', 'error');
             return;
