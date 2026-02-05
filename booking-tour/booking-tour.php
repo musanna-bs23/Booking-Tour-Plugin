@@ -1575,7 +1575,7 @@ class BookingTour {
         wp_mail($admin_email, $subject, $message, $headers);
     }
 
-    private function send_confirmation_email($customer_email, $customer_name, $type, $date, $slot_ids = '', $ticket_count = 1) {
+    private function send_confirmation_email($customer_email, $customer_name, $type, $date, $slot_ids = '', $ticket_count = 1, $total_price = null) {
         global $wpdb;
         
         $subject = 'Booking Confirmed - ' . $type->type_name;
@@ -1606,8 +1606,57 @@ class BookingTour {
                 $message .= "Number of Tickets: $ticket_count\n";
             }
         }
+        if (!is_null($total_price)) {
+            $message .= "Total Amount: BDT " . number_format($total_price, 2) . "\n";
+        }
         
         $message .= "\nWe look forward to seeing you!\n\n";
+        $message .= "Best regards,\nKnowledge Hub Team";
+        
+        $headers = array(
+            'From: Knowledge Hub <knowledgehub@brac.net>',
+            'Content-Type: text/plain; charset=UTF-8'
+        );
+        
+        wp_mail($customer_email, $subject, $message, $headers);
+    }
+
+    private function send_rejection_email($customer_email, $customer_name, $type, $date, $slot_ids = '', $ticket_count = 1, $total_price = null) {
+        global $wpdb;
+        
+        $subject = 'Booking Rejected - ' . $type->type_name;
+        
+        $message = "Dear $customer_name,\n\n";
+        $message .= "We’re sorry to inform you that your booking has been rejected.\n\n";
+        $message .= "Booking Details:\n";
+        $message .= "Booking Type: {$type->type_name}\n";
+        $message .= "Date: " . date('F j, Y', strtotime($date)) . "\n";
+        
+        if (($type->type_category === 'hall' || $type->type_category === 'staircase') && $slot_ids) {
+            $slot_id_arr = array_map('intval', explode(',', $slot_ids));
+            $slots = $wpdb->get_results(
+                "SELECT slot_name, start_time, end_time FROM {$wpdb->prefix}bt_slots WHERE id IN (" . implode(',', $slot_id_arr) . ")"
+            );
+            $message .= "Time Slots:\n";
+            foreach ($slots as $slot) {
+                $message .= sprintf(
+                    "- %s (%s - %s)\n",
+                    $slot->slot_name,
+                    date('g:i A', strtotime($slot->start_time)),
+                    date('g:i A', strtotime($slot->end_time))
+                );
+            }
+        } else {
+            $message .= "Tour Time: " . date('g:i A', strtotime($type->tour_start_time)) . " - " . date('g:i A', strtotime($type->tour_end_time)) . "\n";
+            if ($type->type_category === 'individual_tour') {
+                $message .= "Number of Tickets: $ticket_count\n";
+            }
+        }
+        if (!is_null($total_price)) {
+            $message .= "Total Amount: BDT " . number_format($total_price, 2) . "\n";
+        }
+        
+        $message .= "\nIf you have any questions, please contact us.\n\n";
         $message .= "Best regards,\nKnowledge Hub Team";
         
         $headers = array(
@@ -1799,8 +1848,8 @@ class BookingTour {
             wp_send_json_error('Invalid status');
         }
 
-        // If approving, send confirmation email
-        if ($status === 'approved') {
+        // If approving or rejecting, send email
+        if ($status === 'approved' || $status === 'rejected') {
             $booking = $wpdb->get_row($wpdb->prepare(
                 "SELECT b.*, t.type_name, t.type_category, t.tour_start_time, t.tour_end_time 
                  FROM {$wpdb->prefix}bt_bookings b 
@@ -1817,14 +1866,27 @@ class BookingTour {
                     'tour_end_time' => $booking->tour_end_time
                 );
                 
-                $this->send_confirmation_email(
-                    $booking->customer_email,
-                    $booking->customer_name,
-                    $type,
-                    $booking->booking_date,
-                    $booking->slot_ids,
-                    $booking->ticket_count
-                );
+                if ($status === 'approved') {
+                    $this->send_confirmation_email(
+                        $booking->customer_email,
+                        $booking->customer_name,
+                        $type,
+                        $booking->booking_date,
+                        $booking->slot_ids,
+                        $booking->ticket_count,
+                        $booking->total_price
+                    );
+                } else {
+                    $this->send_rejection_email(
+                        $booking->customer_email,
+                        $booking->customer_name,
+                        $type,
+                        $booking->booking_date,
+                        $booking->slot_ids,
+                        $booking->ticket_count,
+                        $booking->total_price
+                    );
+                }
             }
         }
         
@@ -1912,7 +1974,7 @@ class BookingTour {
                        t.type_name, t.type_category, t.tour_price, t.ticket_price
                 FROM {$wpdb->prefix}bt_bookings b
                 LEFT JOIN {$wpdb->prefix}bt_booking_types t ON b.booking_type_id = t.id
-                WHERE $where ORDER BY b.booking_date DESC, b.id DESC";
+                WHERE $where ORDER BY b.booking_date DESC, b.id DESC LIMIT 500";
         $bookings = empty($params) ? $wpdb->get_results($sql) : $wpdb->get_results($wpdb->prepare($sql, $params));
 
         $booking_ids = array();
@@ -1992,6 +2054,7 @@ class BookingTour {
             $html .= esc_html($key) . ': ' . esc_html($val) . '<br>';
         }
         $html .= '</div>';
+        $html .= '<div class="section"><em>Report includes the first 500 records only for performance reasons.</em></div>';
 
         foreach ($bookings as $booking) {
             $html .= '<h2>Booking #' . intval($booking->id) . '</h2>';

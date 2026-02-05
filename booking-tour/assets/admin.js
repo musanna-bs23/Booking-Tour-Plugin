@@ -371,14 +371,21 @@ jQuery(document).ready(function($) {
         }
         let html = '<div class="bt-pagination-controls">';
         for (let i = 1; i <= totalPages; i++) {
-            html += '<button class="bt-page-btn' + (i === current ? ' active' : '') + '" data-page="' + i + '">' + i + '</button>';
+            html += '<button class="bt-page-btn' + (i === current ? ' active' : '') + '" data-page="' + i + '" data-target="' + targetSelector + '">' + i + '</button>';
         }
         html += '</div>';
         $(targetSelector).html(html);
     }
 
     $(document).on('click', '.bt-page-btn', function() {
-        currentPage = parseInt($(this).data('page'));
+        const page = parseInt($(this).data('page'));
+        const target = $(this).data('target');
+        if (target === '#bt-holiday-pagination') {
+            holidayPage = page;
+            loadHolidayList();
+            return;
+        }
+        currentPage = page;
         if ($('#bt-bookings-body').length) loadBookings();
         else if ($('#bt-type-bookings-body').length) loadTypeBookings($('#bt-type-bookings-body').data('type-id'));
     });
