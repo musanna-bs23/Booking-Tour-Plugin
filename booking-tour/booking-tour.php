@@ -10,7 +10,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-// Database tables are assumed to already exist - no creation logic needed
+require_once __DIR__ . '/db-schema.php';
 
 class BookingTour {
     
@@ -18,8 +18,7 @@ class BookingTour {
     
     public function __construct() {
         register_activation_hook(__FILE__, array($this, 'activate'));
-        $this->ensure_staircase_type();
-        $this->ensure_addons_tables();
+        $this->ensure_default_types();
         add_action('admin_menu', array($this, 'add_admin_menu'));
         add_action('admin_enqueue_scripts', array($this, 'admin_scripts'));
         add_action('wp_enqueue_scripts', array($this, 'frontend_scripts'));
@@ -66,73 +65,184 @@ class BookingTour {
     }
 
     public function activate() {
-        // Database tables are assumed to already exist
-        // Only create upload directory if needed
+        bt_create_schema();
+
         $upload_dir = wp_upload_dir();
         $bt_dir = $upload_dir['basedir'] . '/booking-tour-payments';
         if (!file_exists($bt_dir)) {
             wp_mkdir_p($bt_dir);
         }
-        $this->ensure_addons_tables();
+        $this->ensure_default_types();
     }
 
-    private function ensure_staircase_type() {
+    private function ensure_default_types() {
         global $wpdb;
-        $table = $wpdb->prefix . 'bt_booking_types';
-        $exists = $wpdb->get_var($wpdb->prepare(
-            "SELECT COUNT(*) FROM {$table} WHERE type_category = %s OR type_slug = %s",
-            'staircase',
-            'staircase-book'
-        ));
-        if (intval($exists) > 0) {
-            return;
-        }
-        $wpdb->insert(
-            $table,
+        $types = array(
             array(
-                'type_name' => 'Staircase Book',
-                'type_slug' => 'staircase-book',
-                'type_category' => 'staircase',
-                'weekend_days' => ''
+                'name' => 'Multipurpose Hall',
+                'slug' => 'multipurpose-hall',
+                'category' => 'hall'
             ),
-            array('%s', '%s', '%s', '%s')
+            array(
+                'name' => 'Staircase Book',
+                'slug' => 'staircase-book',
+                'category' => 'staircase'
+            ),
+            array(
+                'name' => 'Individual Tour',
+                'slug' => 'knowledge-hub-individual',
+                'category' => 'individual_tour'
+            ),
+            array(
+                'name' => 'Guide Tour',
+                'slug' => 'knowledge-hub-event',
+                'category' => 'event_tour'
+            )
         );
+
+        foreach ($types as $type) {
+            $table = $this->get_type_table_by_category($type['category']);
+            if (!$table) {
+                continue;
+            }
+            $exists = $wpdb->get_var($wpdb->prepare(
+                "SELECT type_id FROM {$table} WHERE type_slug = %s LIMIT 1",
+                $type['slug']
+            ));
+            if ($exists) {
+                continue;
+            }
+
+            $wpdb->insert(
+                $wpdb->prefix . 'bt_booking_types',
+                array('name' => $type['name']),
+                array('%s')
+            );
+            $type_id = intval($wpdb->insert_id);
+            if ($type_id <= 0) {
+                continue;
+            }
+
+            $data = array(
+                'type_id' => $type_id,
+                'type_slug' => $type['slug'],
+                'type_category' => $type['category'],
+                'weekend_days' => ''
+            );
+            $format = array('%d', '%s', '%s', '%s');
+
+            if ($type['category'] === 'individual_tour') {
+                $data['tour_start_time'] = '09:00:00';
+                $data['tour_end_time'] = '17:00:00';
+                $data['max_tickets'] = 50;
+                $data['ticket_price'] = 0;
+                $data['booking_window_mode'] = 'limit';
+                $data['booking_window_days'] = 1;
+                $format = array('%d', '%s', '%s', '%s', '%s', '%s', '%d', '%f', '%s', '%d');
+            }
+
+            if ($type['category'] === 'event_tour') {
+                $data['tour_start_time'] = '09:00:00';
+                $data['tour_end_time'] = '17:00:00';
+                $data['max_clusters'] = 0;
+                $data['members_per_cluster'] = 1;
+                $data['price_per_cluster'] = 0;
+                $format = array('%d', '%s', '%s', '%s', '%s', '%s', '%d', '%d', '%f');
+            }
+
+            $wpdb->insert($table, $data, $format);
+        }
     }
 
-    private function ensure_addons_tables() {
+    private function get_type_table_by_category($category) {
         global $wpdb;
-        require_once ABSPATH . 'wp-admin/includes/upgrade.php';
-        $charset_collate = $wpdb->get_charset_collate();
-        $addons_table = $wpdb->prefix . 'bt_addons';
-        $booking_addons_table = $wpdb->prefix . 'bt_booking_addons';
+        switch ($category) {
+            case 'hall':
+                return $wpdb->prefix . 'bt_hall_types';
+            case 'staircase':
+                return $wpdb->prefix . 'bt_staircase_types';
+            case 'individual_tour':
+                return $wpdb->prefix . 'bt_individual_tour_types';
+            case 'event_tour':
+                return $wpdb->prefix . 'bt_event_tour_types';
+            default:
+                return '';
+        }
+    }
 
-        $sql1 = "CREATE TABLE {$addons_table} (
-            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-            booking_type_id BIGINT UNSIGNED NOT NULL,
-            name VARCHAR(191) NOT NULL,
-            price DECIMAL(10,2) NOT NULL DEFAULT 0,
-            max_quantity INT NOT NULL DEFAULT 0,
-            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            PRIMARY KEY (id),
-            KEY booking_type_id (booking_type_id)
-        ) {$charset_collate};";
+    private function get_types_select_sql() {
+        global $wpdb;
+        $types = $wpdb->prefix . 'bt_booking_types';
+        $hall = $wpdb->prefix . 'bt_hall_types';
+        $stair = $wpdb->prefix . 'bt_staircase_types';
+        $individual = $wpdb->prefix . 'bt_individual_tour_types';
+        $event = $wpdb->prefix . 'bt_event_tour_types';
 
-        $sql2 = "CREATE TABLE {$booking_addons_table} (
-            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-            booking_id BIGINT UNSIGNED NOT NULL,
-            addon_id BIGINT UNSIGNED NOT NULL,
-            addon_name VARCHAR(191) NOT NULL,
-            addon_price DECIMAL(10,2) NOT NULL DEFAULT 0,
-            quantity INT NOT NULL DEFAULT 0,
-            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (id),
-            KEY booking_id (booking_id),
-            KEY addon_id (addon_id)
-        ) {$charset_collate};";
+        return "SELECT
+                t.id,
+                t.name AS type_name,
+                COALESCE(h.type_slug, s.type_slug, i.type_slug, e.type_slug) AS type_slug,
+                COALESCE(h.type_category, s.type_category, i.type_category, e.type_category) AS type_category,
+                COALESCE(h.weekend_days, s.weekend_days, i.weekend_days, e.weekend_days) AS weekend_days,
+                COALESCE(i.tour_start_time, e.tour_start_time) AS tour_start_time,
+                COALESCE(i.tour_end_time, e.tour_end_time) AS tour_end_time,
+                i.max_tickets AS max_daily_capacity,
+                i.ticket_price AS ticket_price,
+                i.booking_window_mode AS booking_window_mode,
+                i.booking_window_days AS booking_window_days,
+                e.max_clusters AS event_max_clusters,
+                e.members_per_cluster AS event_members_per_cluster,
+                e.price_per_cluster AS event_cluster_price
+            FROM {$types} t
+            LEFT JOIN {$hall} h ON h.type_id = t.id
+            LEFT JOIN {$stair} s ON s.type_id = t.id
+            LEFT JOIN {$individual} i ON i.type_id = t.id
+            LEFT JOIN {$event} e ON e.type_id = t.id";
+    }
 
-        dbDelta($sql1);
-        dbDelta($sql2);
+    private function get_all_types() {
+        global $wpdb;
+        $sql = $this->get_types_select_sql() . " ORDER BY t.id";
+        return $wpdb->get_results($sql);
+    }
+
+    private function get_type_by_id($type_id) {
+        global $wpdb;
+        $sql = $this->get_types_select_sql() . " WHERE t.id = %d";
+        return $wpdb->get_row($wpdb->prepare($sql, $type_id));
+    }
+
+    private function get_type_by_slug($slug) {
+        global $wpdb;
+        $sql = $this->get_types_select_sql() .
+            " WHERE h.type_slug = %s OR s.type_slug = %s OR i.type_slug = %s OR e.type_slug = %s";
+        return $wpdb->get_row($wpdb->prepare($sql, $slug, $slug, $slug, $slug));
+    }
+
+    private function get_type_by_category($category) {
+        global $wpdb;
+        $sql = $this->get_types_select_sql() .
+            " WHERE h.type_category = %s OR s.type_category = %s OR i.type_category = %s OR e.type_category = %s";
+        return $wpdb->get_row($wpdb->prepare($sql, $category, $category, $category, $category));
+    }
+
+    private function get_type_joins_sql() {
+        global $wpdb;
+        $types = $wpdb->prefix . 'bt_booking_types';
+        $hall = $wpdb->prefix . 'bt_hall_types';
+        $stair = $wpdb->prefix . 'bt_staircase_types';
+        $individual = $wpdb->prefix . 'bt_individual_tour_types';
+        $event = $wpdb->prefix . 'bt_event_tour_types';
+
+        return "LEFT JOIN {$types} t ON b.booking_type_id = t.id
+            LEFT JOIN {$hall} h ON h.type_id = t.id
+            LEFT JOIN {$stair} s ON s.type_id = t.id
+            LEFT JOIN {$individual} i ON i.type_id = t.id
+            LEFT JOIN {$event} e ON e.type_id = t.id";
+    }
+
+    private function get_type_category_sql() {
+        return "COALESCE(h.type_category, s.type_category, i.type_category, e.type_category)";
     }
 
     public function add_admin_menu() {
@@ -156,8 +266,7 @@ class BookingTour {
             array($this, 'render_holidays_page')
         );
 
-        global $wpdb;
-        $types = $wpdb->get_results("SELECT * FROM {$wpdb->prefix}bt_booking_types ORDER BY id");
+        $types = $this->get_all_types();
         
         foreach ($types as $type) {
             add_submenu_page(
@@ -198,8 +307,7 @@ class BookingTour {
     }
 
     public function render_bookings_page() {
-        global $wpdb;
-        $types = $wpdb->get_results("SELECT * FROM {$wpdb->prefix}bt_booking_types ORDER BY id");
+        $types = $this->get_all_types();
         ?>
         <div class="wrap bt-admin-wrap">
             <h1>
@@ -403,11 +511,7 @@ class BookingTour {
         $page = isset($_GET['page']) ? sanitize_text_field($_GET['page']) : '';
         $type_slug = str_replace('booking-tour-', '', $page);
         
-        global $wpdb;
-        $type = $wpdb->get_row($wpdb->prepare(
-            "SELECT * FROM {$wpdb->prefix}bt_booking_types WHERE type_slug = %s",
-            $type_slug
-        ));
+        $type = $this->get_type_by_slug($type_slug);
 
         if (!$type) {
             echo '<div class="wrap"><h1>Booking type not found</h1></div>';
@@ -565,15 +669,20 @@ class BookingTour {
             
             <?php elseif ($type->type_category === 'event_tour'): ?>
             <!-- Event Tour Settings -->
+            <?php
+                $event_max_clusters = intval($type->event_max_clusters);
+                $event_members_per_cluster = intval($type->event_members_per_cluster);
+                $event_cluster_price = floatval($type->event_cluster_price);
+            ?>
             <div class="bt-settings-card">
                 <h2>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
                         <circle cx="12" cy="12" r="10"></circle>
                         <polyline points="12 6 12 12 16 14"></polyline>
                     </svg>
-                    Tour Schedule
+                    Guide Tour Settings
                 </h2>
-                <p class="bt-hint">Set the tour timing and price for event bookings</p>
+                <p class="bt-hint">Set the tour timing and cluster availability for guide bookings</p>
                 
                 <div class="bt-tour-settings-form">
                     <div class="bt-input-row">
@@ -585,9 +694,19 @@ class BookingTour {
                             <label>Tour End Time</label>
                             <input type="time" id="bt-tour-end" value="<?php echo esc_attr(substr($type->tour_end_time, 0, 5)); ?>">
                         </div>
+                    </div>
+                    <div class="bt-input-row">
                         <div class="bt-input-group">
-                            <label>Price</label>
-                            <input type="number" id="bt-tour-price" value="<?php echo esc_attr($type->tour_price); ?>" min="0" step="0.01">
+                            <label>Max Clusters</label>
+                            <input type="number" id="bt-event-max-clusters" value="<?php echo esc_attr($event_max_clusters); ?>" min="0">
+                        </div>
+                        <div class="bt-input-group">
+                            <label>Members per Cluster</label>
+                            <input type="number" id="bt-event-members-per-cluster" value="<?php echo esc_attr($event_members_per_cluster); ?>" min="1">
+                        </div>
+                        <div class="bt-input-group">
+                            <label>Price per Cluster (BDT)</label>
+                            <input type="number" id="bt-event-cluster-price" value="<?php echo esc_attr($event_cluster_price); ?>" min="0" step="0.01">
                         </div>
                     </div>
                     <button class="button button-primary bt-save-tour-btn" id="bt-save-tour" data-type-id="<?php echo esc_attr($type->id); ?>">
@@ -602,8 +721,8 @@ class BookingTour {
             
             <?php elseif ($type->type_category === 'individual_tour'): ?>
             <?php
-                $booking_window_mode = get_option('bt_individual_booking_window_mode_' . $type->id, 'limit');
-                $booking_window_days = intval(get_option('bt_individual_booking_window_days_' . $type->id, 1));
+                $booking_window_mode = $type->booking_window_mode ?: 'limit';
+                $booking_window_days = intval($type->booking_window_days);
                 if ($booking_window_days < 0) $booking_window_days = 0;
             ?>
             <!-- Individual Tour Settings -->
@@ -852,6 +971,14 @@ class BookingTour {
 
         global $wpdb;
         $type_id = intval($_POST['type_id']);
+        $type = $this->get_type_by_id($type_id);
+        if (!$type) {
+            wp_send_json_error('Invalid booking type');
+        }
+        $table = $this->get_type_table_by_category($type->type_category);
+        if (empty($table)) {
+            wp_send_json_error('Invalid booking type');
+        }
         
         $data = array();
         $format = array();
@@ -870,41 +997,69 @@ class BookingTour {
         
         // Tour settings
         if (isset($_POST['tour_start_time'])) {
-            $data['tour_start_time'] = sanitize_text_field($_POST['tour_start_time']);
-            $format[] = '%s';
+            if ($type->type_category === 'individual_tour' || $type->type_category === 'event_tour') {
+                $data['tour_start_time'] = sanitize_text_field($_POST['tour_start_time']);
+                $format[] = '%s';
+            }
         }
         if (isset($_POST['tour_end_time'])) {
-            $data['tour_end_time'] = sanitize_text_field($_POST['tour_end_time']);
-            $format[] = '%s';
-        }
-        if (isset($_POST['tour_price'])) {
-            $data['tour_price'] = floatval($_POST['tour_price']);
-            $format[] = '%f';
+            if ($type->type_category === 'individual_tour' || $type->type_category === 'event_tour') {
+                $data['tour_end_time'] = sanitize_text_field($_POST['tour_end_time']);
+                $format[] = '%s';
+            }
         }
         if (isset($_POST['max_daily_capacity'])) {
-            $data['max_daily_capacity'] = intval($_POST['max_daily_capacity']);
-            $format[] = '%d';
+            if ($type->type_category === 'individual_tour') {
+                $data['max_tickets'] = intval($_POST['max_daily_capacity']);
+                $format[] = '%d';
+            }
         }
         if (isset($_POST['ticket_price'])) {
-            $data['ticket_price'] = floatval($_POST['ticket_price']);
-            $format[] = '%f';
+            if ($type->type_category === 'individual_tour') {
+                $data['ticket_price'] = floatval($_POST['ticket_price']);
+                $format[] = '%f';
+            }
+        }
+        if (isset($_POST['event_max_clusters'])) {
+            if ($type->type_category === 'event_tour') {
+                $data['max_clusters'] = max(0, intval($_POST['event_max_clusters']));
+                $format[] = '%d';
+            }
+        }
+        if (isset($_POST['event_members_per_cluster'])) {
+            if ($type->type_category === 'event_tour') {
+                $data['members_per_cluster'] = max(1, intval($_POST['event_members_per_cluster']));
+                $format[] = '%d';
+            }
+        }
+        if (isset($_POST['event_cluster_price'])) {
+            if ($type->type_category === 'event_tour') {
+                $data['price_per_cluster'] = floatval($_POST['event_cluster_price']);
+                $format[] = '%f';
+            }
         }
 
         if (isset($_POST['booking_window_mode'])) {
-            $mode = sanitize_text_field($_POST['booking_window_mode']);
-            if ($mode !== 'none') $mode = 'limit';
-            update_option('bt_individual_booking_window_mode_' . $type_id, $mode, false);
+            if ($type->type_category === 'individual_tour') {
+                $mode = sanitize_text_field($_POST['booking_window_mode']);
+                if ($mode !== 'none') $mode = 'limit';
+                $data['booking_window_mode'] = $mode;
+                $format[] = '%s';
+            }
         }
         if (isset($_POST['booking_window_days'])) {
-            $days = max(0, intval($_POST['booking_window_days']));
-            update_option('bt_individual_booking_window_days_' . $type_id, $days, false);
+            if ($type->type_category === 'individual_tour') {
+                $days = max(0, intval($_POST['booking_window_days']));
+                $data['booking_window_days'] = $days;
+                $format[] = '%d';
+            }
         }
 
         if (!empty($data)) {
             $wpdb->update(
-                $wpdb->prefix . 'bt_booking_types',
+                $table,
                 $data,
-                array('id' => $type_id),
+                array('type_id' => $type_id),
                 $format,
                 array('%d')
             );
@@ -991,14 +1146,7 @@ class BookingTour {
         global $wpdb;
         $type_id = intval($_POST['type_id']);
         
-        $type = $wpdb->get_row($wpdb->prepare(
-            "SELECT * FROM {$wpdb->prefix}bt_booking_types WHERE id = %d",
-            $type_id
-        ));
-        if ($type && $type->type_category === 'individual_tour') {
-            $type->booking_window_mode = get_option('bt_individual_booking_window_mode_' . $type_id, 'limit');
-            $type->booking_window_days = intval(get_option('bt_individual_booking_window_days_' . $type_id, 1));
-        }
+        $type = $this->get_type_by_id($type_id);
 
         // Get slots (hall and staircase)
         $slots = array();
@@ -1030,6 +1178,7 @@ class BookingTour {
         $bookedSlots = array();
         $bookedDates = array();
         $ticketsByDate = array();
+        $eventClustersByDate = array();
         
         foreach ($bookings as $booking) {
             $date = $booking->booking_date;
@@ -1053,26 +1202,18 @@ class BookingTour {
                         $ticketsByDate[$date] = 0;
                     }
                     $ticketsByDate[$date] += intval($booking->ticket_count);
+                } elseif ($type->type_category === 'event_tour') {
+                    if (!isset($eventClustersByDate[$date])) {
+                        $eventClustersByDate[$date] = 0;
+                    }
+                    $eventClustersByDate[$date] += intval($booking->ticket_count);
                 }
             }
         }
 
         // Also get event tour bookings to check for date conflicts
-        $event_type = $wpdb->get_row("SELECT id FROM {$wpdb->prefix}bt_booking_types WHERE type_category = 'event_tour'");
-        $individual_type = $wpdb->get_row("SELECT id FROM {$wpdb->prefix}bt_booking_types WHERE type_category = 'individual_tour'");
-        $shared_tour_start_time = '';
-        $shared_tour_end_time = '';
-        if ($type && ($type->type_category === 'event_tour' || $type->type_category === 'individual_tour')) {
-            $event_time = $wpdb->get_row("SELECT tour_start_time, tour_end_time FROM {$wpdb->prefix}bt_booking_types WHERE type_category = 'event_tour'");
-            $individual_time = $wpdb->get_row("SELECT tour_start_time, tour_end_time FROM {$wpdb->prefix}bt_booking_types WHERE type_category = 'individual_tour'");
-            if ($event_time && $event_time->tour_start_time) {
-                $shared_tour_start_time = $event_time->tour_start_time;
-                $shared_tour_end_time = $event_time->tour_end_time;
-            } elseif ($individual_time && $individual_time->tour_start_time) {
-                $shared_tour_start_time = $individual_time->tour_start_time;
-                $shared_tour_end_time = $individual_time->tour_end_time;
-            }
-        }
+        $event_type = $this->get_type_by_category('event_tour');
+        $individual_type = $this->get_type_by_category('individual_tour');
         
         $eventBlockedDates = array();
         $individualBlockedDates = array();
@@ -1100,18 +1241,23 @@ class BookingTour {
             $bookedSlots[$date] = array_values(array_unique($slots_arr));
         }
 
+        $fullyBookedDates = array();
+        if ($type && ($type->type_category === 'hall' || $type->type_category === 'staircase')) {
+            $fullyBookedDates = $this->get_fully_booked_dates($type_id);
+        }
+
         wp_send_json_success(array(
             'type' => $type,
             'slots' => $slots,
             'addons' => $addons,
             'holidays' => $holidays,
             'bookedSlots' => $bookedSlots,
+            'fullyBookedDates' => $fullyBookedDates,
             'bookedDates' => $bookedDates,
             'ticketsByDate' => $ticketsByDate,
+            'eventClustersByDate' => $eventClustersByDate,
             'eventBlockedDates' => $eventBlockedDates,
             'individualBlockedDates' => $individualBlockedDates,
-            'sharedTourStartTime' => $shared_tour_start_time,
-            'sharedTourEndTime' => $shared_tour_end_time,
             'serverTime' => current_time('H:i'),
             'serverDate' => current_time('Y-m-d')
         ));
@@ -1122,10 +1268,7 @@ class BookingTour {
         $type_id = intval($_POST['type_id']);
         $date = sanitize_text_field($_POST['date']);
         
-        $type = $wpdb->get_row($wpdb->prepare(
-            "SELECT * FROM {$wpdb->prefix}bt_booking_types WHERE id = %d",
-            $type_id
-        ));
+        $type = $this->get_type_by_id($type_id);
         
         // Get bookings for this date
         $bookings = $wpdb->get_results($wpdb->prepare(
@@ -1137,6 +1280,7 @@ class BookingTour {
         $bookedSlots = array();
         $totalTickets = 0;
         $addonsAvailability = array();
+        $fullyBookedDates = array();
         
         foreach ($bookings as $booking) {
             if (($type->type_category === 'hall' || $type->type_category === 'staircase') && $booking->slot_ids) {
@@ -1144,6 +1288,10 @@ class BookingTour {
                 $bookedSlots = array_merge($bookedSlots, $slot_ids);
             }
             $totalTickets += intval($booking->ticket_count);
+        }
+
+        if ($type && ($type->type_category === 'hall' || $type->type_category === 'staircase')) {
+            $fullyBookedDates = $this->get_fully_booked_dates($type_id);
         }
 
         if ($type && $type->type_category === 'hall' && !empty($date)) {
@@ -1175,51 +1323,25 @@ class BookingTour {
             }
         }
         
-        // Check cross-calendar blocking
-        $event_type = $wpdb->get_row("SELECT id FROM {$wpdb->prefix}bt_booking_types WHERE type_category = 'event_tour'");
-        $individual_type = $wpdb->get_row("SELECT id FROM {$wpdb->prefix}bt_booking_types WHERE type_category = 'individual_tour'");
-        
+        // Independent tour availability
         $dateBlockedByEvent = false;
         $dateBlockedByIndividual = false;
         $eventBlockedDates = array();
         $individualBlockedDates = array();
         $bookedDates = array();
         $ticketsByDate = array();
-        
-        if ($event_type) {
-            $event_booking = $wpdb->get_var($wpdb->prepare(
-                "SELECT COUNT(*) FROM {$wpdb->prefix}bt_bookings 
-                 WHERE booking_type_id = %d AND booking_date = %s AND status IN ('pending', 'approved')",
-                $event_type->id, $date
-            ));
-            $dateBlockedByEvent = $event_booking > 0;
-            $eventBlockedDates = $wpdb->get_col($wpdb->prepare(
-                "SELECT DISTINCT booking_date FROM {$wpdb->prefix}bt_bookings 
-                 WHERE booking_type_id = %d AND status IN ('pending', 'approved') AND booking_date >= CURDATE()",
-                $event_type->id
-            ));
-        }
-        
-        if ($individual_type) {
-            $individual_booking = $wpdb->get_var($wpdb->prepare(
-                "SELECT COUNT(*) FROM {$wpdb->prefix}bt_bookings 
-                 WHERE booking_type_id = %d AND booking_date = %s AND status IN ('pending', 'approved')",
-                $individual_type->id, $date
-            ));
-            $dateBlockedByIndividual = $individual_booking > 0;
-            $individualBlockedDates = $wpdb->get_col($wpdb->prepare(
-                "SELECT DISTINCT booking_date FROM {$wpdb->prefix}bt_bookings 
-                 WHERE booking_type_id = %d AND status IN ('pending', 'approved') AND booking_date >= CURDATE()",
-                $individual_type->id
-            ));
-        }
+        $eventClustersByDate = array();
 
         if ($type && $type->type_category === 'event_tour') {
-            $bookedDates = $wpdb->get_col($wpdb->prepare(
-                "SELECT DISTINCT booking_date FROM {$wpdb->prefix}bt_bookings 
-                 WHERE booking_type_id = %d AND status IN ('pending', 'approved') AND booking_date >= CURDATE()",
+            $cluster_rows = $wpdb->get_results($wpdb->prepare(
+                "SELECT booking_date, SUM(ticket_count) AS total_clusters FROM {$wpdb->prefix}bt_bookings
+                 WHERE booking_type_id = %d AND status IN ('pending', 'approved') AND booking_date >= CURDATE()
+                 GROUP BY booking_date",
                 $type_id
             ));
+            foreach ($cluster_rows as $row) {
+                $eventClustersByDate[$row->booking_date] = intval($row->total_clusters);
+            }
         }
 
         if ($type && $type->type_category === 'individual_tour') {
@@ -1237,14 +1359,16 @@ class BookingTour {
         wp_send_json_success(array(
             'bookedSlots' => array_values(array_unique($bookedSlots)),
             'totalTickets' => $totalTickets,
-            'remainingCapacity' => $type->max_daily_capacity - $totalTickets,
+            'remainingCapacity' => $type ? (intval($type->max_daily_capacity) - $totalTickets) : 0,
             'addonsAvailability' => $addonsAvailability,
+            'fullyBookedDates' => $fullyBookedDates,
             'dateBlockedByEvent' => $dateBlockedByEvent,
             'dateBlockedByIndividual' => $dateBlockedByIndividual,
             'eventBlockedDates' => $eventBlockedDates,
             'individualBlockedDates' => $individualBlockedDates,
             'bookedDates' => $bookedDates,
             'ticketsByDate' => $ticketsByDate,
+            'eventClustersByDate' => $eventClustersByDate,
             'serverTime' => current_time('H:i'),
             'serverDate' => current_time('Y-m-d')
         ));
@@ -1255,10 +1379,10 @@ class BookingTour {
         $type_id = intval($_POST['type_id']);
         $date = sanitize_text_field($_POST['date']);
         
-        $type = $wpdb->get_row($wpdb->prepare(
-            "SELECT max_daily_capacity FROM {$wpdb->prefix}bt_booking_types WHERE id = %d",
-            $type_id
-        ));
+        $type = $this->get_type_by_id($type_id);
+        if (!$type) {
+            wp_send_json_error('Invalid booking type');
+        }
         
         $total_booked = $wpdb->get_var($wpdb->prepare(
             "SELECT COALESCE(SUM(ticket_count), 0) FROM {$wpdb->prefix}bt_bookings 
@@ -1266,11 +1390,11 @@ class BookingTour {
             $type_id, $date
         ));
         
-        $remaining = max(0, $type->max_daily_capacity - $total_booked);
+        $remaining = max(0, intval($type->max_daily_capacity) - $total_booked);
         
         wp_send_json_success(array(
             'remaining' => $remaining,
-            'maxCapacity' => $type->max_daily_capacity,
+            'maxCapacity' => intval($type->max_daily_capacity),
             'booked' => intval($total_booked)
         ));
     }
@@ -1297,10 +1421,7 @@ class BookingTour {
         }
 
         // Get booking type
-        $type = $wpdb->get_row($wpdb->prepare(
-            "SELECT * FROM {$wpdb->prefix}bt_booking_types WHERE id = %d",
-            $type_id
-        ));
+        $type = $this->get_type_by_id($type_id);
 
         if (!$type) {
             wp_send_json_error('Invalid booking type');
@@ -1312,8 +1433,8 @@ class BookingTour {
         }
 
         if ($type->type_category === 'individual_tour') {
-            $mode = get_option('bt_individual_booking_window_mode_' . $type_id, 'limit');
-            $days = intval(get_option('bt_individual_booking_window_days_' . $type_id, 1));
+            $mode = $type->booking_window_mode ?: 'limit';
+            $days = intval($type->booking_window_days);
             if ($mode === 'limit') {
                 $today = current_time('Y-m-d');
                 $max_date = date('Y-m-d', strtotime($today . ' +' . max(0, $days) . ' days'));
@@ -1425,27 +1546,14 @@ class BookingTour {
             }
             $total_price = $slot_total + $addons_total;
         } elseif ($type->type_category === 'event_tour') {
-            // Check if date is available (not booked by individual tour)
-            $individual_type = $wpdb->get_row("SELECT id FROM {$wpdb->prefix}bt_booking_types WHERE type_category = 'individual_tour'");
-            if ($individual_type) {
-                $blocked = $wpdb->get_var($wpdb->prepare(
-                    "SELECT COUNT(*) FROM {$wpdb->prefix}bt_bookings 
-                     WHERE booking_type_id = %d AND booking_date = %s AND status IN ('pending', 'approved')",
-                    $individual_type->id, $booking_date
-                ));
-                if ($blocked > 0) {
-                    wp_send_json_error('This date is not available for event booking.');
-                }
-            }
-            
-            // Check if date already has event booking
-            $event_exists = $wpdb->get_var($wpdb->prepare(
-                "SELECT COUNT(*) FROM {$wpdb->prefix}bt_bookings 
+            $max_clusters = intval($type->event_max_clusters);
+            $total_booked = $wpdb->get_var($wpdb->prepare(
+                "SELECT COALESCE(SUM(ticket_count), 0) FROM {$wpdb->prefix}bt_bookings 
                  WHERE booking_type_id = %d AND booking_date = %s AND status IN ('pending', 'approved')",
                 $type_id, $booking_date
             ));
-            if ($event_exists > 0) {
-                wp_send_json_error('This date already has an event booking.');
+            if (($total_booked + $ticket_count) > $max_clusters) {
+                wp_send_json_error('Not enough clusters available. Only ' . max(0, ($max_clusters - $total_booked)) . ' remaining.');
             }
         } elseif ($type->type_category === 'individual_tour') {
             // Check capacity
@@ -1455,21 +1563,8 @@ class BookingTour {
                 $type_id, $booking_date
             ));
             
-            if (($total_booked + $ticket_count) > $type->max_daily_capacity) {
-                wp_send_json_error('Not enough tickets available. Only ' . ($type->max_daily_capacity - $total_booked) . ' remaining.');
-            }
-            
-            // Check if date is blocked by event tour
-            $event_type = $wpdb->get_row("SELECT id FROM {$wpdb->prefix}bt_booking_types WHERE type_category = 'event_tour'");
-            if ($event_type) {
-                $blocked = $wpdb->get_var($wpdb->prepare(
-                    "SELECT COUNT(*) FROM {$wpdb->prefix}bt_bookings 
-                     WHERE booking_type_id = %d AND booking_date = %s AND status IN ('pending', 'approved')",
-                    $event_type->id, $booking_date
-                ));
-                if ($blocked > 0) {
-                    wp_send_json_error('This date is not available due to an event booking.');
-                }
+            if (($total_booked + $ticket_count) > intval($type->max_daily_capacity)) {
+                wp_send_json_error('Not enough tickets available. Only ' . (intval($type->max_daily_capacity) - $total_booked) . ' remaining.');
             }
         }
 
@@ -1778,8 +1873,11 @@ class BookingTour {
         $count_sql = "SELECT COUNT(*) FROM {$wpdb->prefix}bt_bookings b WHERE $where";
         $total = empty($params) ? $wpdb->get_var($count_sql) : $wpdb->get_var($wpdb->prepare($count_sql, $params));
         
-        $sql = "SELECT b.*, t.type_name, t.type_category FROM {$wpdb->prefix}bt_bookings b 
-                LEFT JOIN {$wpdb->prefix}bt_booking_types t ON b.booking_type_id = t.id 
+        $type_category_sql = $this->get_type_category_sql();
+        $joins = $this->get_type_joins_sql();
+        $sql = "SELECT b.*, t.name AS type_name, {$type_category_sql} AS type_category
+                FROM {$wpdb->prefix}bt_bookings b
+                {$joins}
                 WHERE $where ORDER BY b.created_at DESC LIMIT %d OFFSET %d";
         
         $params[] = $this->items_per_page;
@@ -1851,9 +1949,12 @@ class BookingTour {
         // If approving or rejecting, send email
         if ($status === 'approved' || $status === 'rejected') {
             $booking = $wpdb->get_row($wpdb->prepare(
-                "SELECT b.*, t.type_name, t.type_category, t.tour_start_time, t.tour_end_time 
-                 FROM {$wpdb->prefix}bt_bookings b 
-                 LEFT JOIN {$wpdb->prefix}bt_booking_types t ON b.booking_type_id = t.id 
+                "SELECT b.*, t.name AS type_name,
+                        {$this->get_type_category_sql()} AS type_category,
+                        COALESCE(i.tour_start_time, e.tour_start_time) AS tour_start_time,
+                        COALESCE(i.tour_end_time, e.tour_end_time) AS tour_end_time
+                 FROM {$wpdb->prefix}bt_bookings b
+                 {$this->get_type_joins_sql()}
                  WHERE b.id = %d",
                 $booking_id
             ));
@@ -1937,6 +2038,82 @@ class BookingTour {
         wp_send_json_success('Booking deleted');
     }
 
+    private function get_fully_booked_dates($type_id) {
+        global $wpdb;
+        $slot_count = intval($wpdb->get_var($wpdb->prepare(
+            "SELECT COUNT(*) FROM {$wpdb->prefix}bt_slots WHERE booking_type_id = %d",
+            $type_id
+        )));
+        if ($slot_count === 0) {
+            return array();
+        }
+
+        $rows = $wpdb->get_results($wpdb->prepare(
+            "SELECT booking_date, slot_ids FROM {$wpdb->prefix}bt_bookings
+             WHERE booking_type_id = %d AND status IN ('pending','approved') AND booking_date >= CURDATE()",
+            $type_id
+        ));
+        $slot_ids_all = array();
+        foreach ($rows as $row) {
+            if ($row->slot_ids) {
+                $slot_ids_all = array_merge($slot_ids_all, array_map('intval', explode(',', $row->slot_ids)));
+            }
+        }
+        if (empty($slot_ids_all)) {
+            return array();
+        }
+
+        $slot_rows = $wpdb->get_results(
+            "SELECT id, start_time, end_time FROM {$wpdb->prefix}bt_slots WHERE booking_type_id = " . intval($type_id)
+        );
+        $slot_map = array();
+        foreach ($slot_rows as $slot) {
+            $slot_map[intval($slot->id)] = array(
+                'start' => $slot->start_time,
+                'end' => $slot->end_time
+            );
+        }
+
+        $dateBooked = array();
+        foreach ($rows as $row) {
+            if (!$row->slot_ids) continue;
+            $date = $row->booking_date;
+            if (!isset($dateBooked[$date])) $dateBooked[$date] = array();
+            $dateBooked[$date] = array_merge($dateBooked[$date], array_map('intval', explode(',', $row->slot_ids)));
+        }
+
+        $fullyBooked = array();
+        foreach ($dateBooked as $date => $slot_ids) {
+            $slot_ids = array_values(array_unique($slot_ids));
+            $bookedIntervals = array();
+            foreach ($slot_ids as $sid) {
+                if (!isset($slot_map[$sid])) continue;
+                $bookedIntervals[] = $slot_map[$sid];
+            }
+            $isFull = true;
+            foreach ($slot_map as $sid => $interval) {
+                $slotStart = $interval['start'];
+                $slotEnd = $interval['end'];
+                $blocked = in_array($sid, $slot_ids, true);
+                if (!$blocked) {
+                    foreach ($bookedIntervals as $b) {
+                        if ($slotStart < $b['end'] && $slotEnd > $b['start']) {
+                            $blocked = true;
+                            break;
+                        }
+                    }
+                }
+                if (!$blocked) {
+                    $isFull = false;
+                    break;
+                }
+            }
+            if ($isFull) $fullyBooked[] = $date;
+        }
+
+        return array_values(array_unique($fullyBooked));
+    }
+
     public function generate_report() {
         check_ajax_referer('bt_admin_nonce', 'nonce');
         if (!current_user_can('manage_options')) {
@@ -1969,11 +2146,14 @@ class BookingTour {
             $params[] = $end_date;
         }
 
+        $type_category_sql = $this->get_type_category_sql();
+        $joins = $this->get_type_joins_sql();
         $sql = "SELECT b.id, b.booking_type_id, b.booking_date, b.slot_ids, b.ticket_count, b.total_price,
                        b.customer_name, b.customer_email, b.customer_phone, b.status,
-                       t.type_name, t.type_category, t.tour_price, t.ticket_price
+                       t.name AS type_name, {$type_category_sql} AS type_category,
+                       i.ticket_price, e.price_per_cluster AS event_cluster_price
                 FROM {$wpdb->prefix}bt_bookings b
-                LEFT JOIN {$wpdb->prefix}bt_booking_types t ON b.booking_type_id = t.id
+                {$joins}
                 WHERE $where ORDER BY b.booking_date DESC, b.id DESC LIMIT 500";
         $bookings = empty($params) ? $wpdb->get_results($sql) : $wpdb->get_results($wpdb->prepare($sql, $params));
 
@@ -2069,6 +2249,9 @@ class BookingTour {
             if ($booking->type_category === 'individual_tour') {
                 $html .= '<tr><td>Tickets</td><td>' . intval($booking->ticket_count) . '</td></tr>';
             }
+            if ($booking->type_category === 'event_tour') {
+                $html .= '<tr><td>Clusters</td><td>' . intval($booking->ticket_count) . '</td></tr>';
+            }
             if (!empty($booking->slot_ids)) {
                 $slot_names = array();
                 $slot_total = 0;
@@ -2082,7 +2265,8 @@ class BookingTour {
                 $html .= '<tr><td>Slot(s)</td><td>' . esc_html(implode(', ', $slot_names)) . '</td></tr>';
                 $html .= '<tr><td>Base Price</td><td>BDT ' . number_format($slot_total, 2) . '</td></tr>';
             } elseif ($booking->type_category === 'event_tour') {
-                $base = floatval($booking->tour_price);
+                $cluster_price = floatval($booking->event_cluster_price);
+                $base = $cluster_price * intval($booking->ticket_count);
                 $html .= '<tr><td>Base Price</td><td>BDT ' . number_format($base, 2) . '</td></tr>';
             } elseif ($booking->type_category === 'individual_tour') {
                 $base = floatval($booking->ticket_price) * intval($booking->ticket_count);
@@ -2114,7 +2298,7 @@ class BookingTour {
     private function get_type_name($type_id) {
         global $wpdb;
         $name = $wpdb->get_var($wpdb->prepare(
-            "SELECT type_name FROM {$wpdb->prefix}bt_booking_types WHERE id = %d",
+            "SELECT name FROM {$wpdb->prefix}bt_booking_types WHERE id = %d",
             $type_id
         ));
         return $name ?: 'Unknown';
@@ -2122,11 +2306,10 @@ class BookingTour {
 
     // Shortcode: Combined Booking (Hall + Tours)
     public function render_book_tour_shortcode($atts) {
-        global $wpdb;
-        $hall_type = $wpdb->get_row("SELECT * FROM {$wpdb->prefix}bt_booking_types WHERE type_category = 'hall'");
-        $staircase_type = $wpdb->get_row("SELECT * FROM {$wpdb->prefix}bt_booking_types WHERE type_category = 'staircase'");
-        $event_type = $wpdb->get_row("SELECT * FROM {$wpdb->prefix}bt_booking_types WHERE type_category = 'event_tour'");
-        $individual_type = $wpdb->get_row("SELECT * FROM {$wpdb->prefix}bt_booking_types WHERE type_category = 'individual_tour'");
+        $hall_type = $this->get_type_by_category('hall');
+        $staircase_type = $this->get_type_by_category('staircase');
+        $event_type = $this->get_type_by_category('event_tour');
+        $individual_type = $this->get_type_by_category('individual_tour');
         
         if (!$hall_type || !$staircase_type || !$event_type || !$individual_type) {
             return '<p>Booking system is not configured properly.</p>';

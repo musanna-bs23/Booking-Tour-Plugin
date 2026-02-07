@@ -80,6 +80,9 @@ jQuery(document).ready(function($) {
         if ($('#bt-tour-price').length) data.tour_price = $('#bt-tour-price').val();
         if ($('#bt-max-capacity').length) data.max_daily_capacity = $('#bt-max-capacity').val();
         if ($('#bt-ticket-price').length) data.ticket_price = $('#bt-ticket-price').val();
+        if ($('#bt-event-max-clusters').length) data.event_max_clusters = $('#bt-event-max-clusters').val();
+        if ($('#bt-event-members-per-cluster').length) data.event_members_per_cluster = $('#bt-event-members-per-cluster').val();
+        if ($('#bt-event-cluster-price').length) data.event_cluster_price = $('#bt-event-cluster-price').val();
         if ($('#bt-booking-window-mode').length) data.booking_window_mode = $('#bt-booking-window-mode').val();
         if ($('#bt-booking-window-days').length) data.booking_window_days = $('#bt-booking-window-days').val();
 
@@ -418,6 +421,9 @@ jQuery(document).ready(function($) {
         }
         if (booking.type_category === 'individual_tour') {
             html += '<div class="bt-detail-row"><span>Tickets:</span><strong>' + booking.ticket_count + ' person(s)</strong></div>';
+        }
+        if (booking.type_category === 'event_tour') {
+            html += '<div class="bt-detail-row"><span>Clusters:</span><strong>' + booking.ticket_count + ' cluster(s)</strong></div>';
         }
         if (booking.type_category === 'hall' && booking.addon_details && booking.addon_details.length) {
             html += '<div class="bt-detail-row"><span>Add-ons:</span><strong></strong></div>';

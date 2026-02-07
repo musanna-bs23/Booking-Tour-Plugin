@@ -19,13 +19,13 @@ jQuery(document).ready(function($) {
     let ticketsByDate = {};
     let eventBlockedDates = [];
     let individualBlockedDates = [];
+    let fullyBookedDates = [];
+    let eventClustersByDate = {};
     let addons = [];
     let addonsAvailability = {};
     let selectedAddons = {};
     let serverTime = btFrontend.serverTime || '00:00';
     let serverDate = btFrontend.serverDate || '';
-    let sharedTourStartTime = '';
-    let sharedTourEndTime = '';
     let pollInterval = null;
     let ticketCount = 1;
     let mode = $('.bt-booking-container').data('mode');
@@ -45,10 +45,7 @@ jQuery(document).ready(function($) {
         $('#bt-type-id').val(typeId);
         $('#bt-type-category').val(category);
         
-        selectedDate = null;
-        selectedSlots = [];
-        ticketCount = 1;
-        selectedAddons = {};
+        resetSelectionState();
         toggleSections();
         updateUI();
         loadTypeData(typeId);
@@ -149,6 +146,7 @@ jQuery(document).ready(function($) {
         
         if (paymentImage) formData.append('payment_image', paymentImage);
 
+        showToast('Submitting...', 'success');
         $('#bt-submit-btn').prop('disabled', true).html('<span class="bt-spinner"></span> Submitting...');
 
         $.ajax({
@@ -159,7 +157,7 @@ jQuery(document).ready(function($) {
             contentType: false,
             success: function(response) {
                 if (response.success) {
-                    showToast(response.data, 'success');
+                    showToast('Submitted', 'success');
                     resetForm();
                 } else {
                     showToast(response.data || 'Error submitting booking', 'error');
@@ -198,13 +196,13 @@ jQuery(document).ready(function($) {
                     bookedSlots = response.data.bookedSlots || {};
                     bookedDates = response.data.bookedDates || [];
                     ticketsByDate = response.data.ticketsByDate || {};
+                    eventClustersByDate = response.data.eventClustersByDate || {};
                     eventBlockedDates = response.data.eventBlockedDates || [];
                     individualBlockedDates = response.data.individualBlockedDates || [];
+                    fullyBookedDates = response.data.fullyBookedDates || [];
                     addons = response.data.addons || [];
                     serverTime = response.data.serverTime || '00:00';
                     serverDate = response.data.serverDate || '';
-                    sharedTourStartTime = response.data.sharedTourStartTime || '';
-                    sharedTourEndTime = response.data.sharedTourEndTime || '';
                     
                     toggleSections();
                     renderCalendar();
@@ -277,6 +275,11 @@ jQuery(document).ready(function($) {
                             }
                         }
                     }
+                    const newFullyBooked = response.data.fullyBookedDates || [];
+                    if (JSON.stringify(newFullyBooked) !== JSON.stringify(fullyBookedDates)) {
+                        fullyBookedDates = newFullyBooked;
+                        hasChanges = true;
+                    }
                     if (typeData.type_category === 'hall') {
                         const newAddonsAvailability = response.data.addonsAvailability || {};
                         if (JSON.stringify(newAddonsAvailability) !== JSON.stringify(addonsAvailability)) {
@@ -312,27 +315,21 @@ jQuery(document).ready(function($) {
                         hasChanges = true;
                     }
                 } else if (typeData.type_category === 'event_tour') {
-                    // Update booked dates for event tour
-                    const newBookedDates = response.data.bookedDates || [];
-                    if (JSON.stringify(newBookedDates) !== JSON.stringify(bookedDates)) {
-                        bookedDates = newBookedDates;
+                    const newEventClusters = response.data.eventClustersByDate || {};
+                    if (JSON.stringify(newEventClusters) !== JSON.stringify(eventClustersByDate)) {
+                        eventClustersByDate = newEventClusters;
                         hasChanges = true;
-                        
-                        // If currently selected date got booked, clear selection
+
                         if (selectedDate) {
                             const dateStr = formatDate(selectedDate);
-                            if (newBookedDates.includes(dateStr)) {
-                                selectedDate = null;
-                                showToast('Selected date is now booked. Please choose another.', 'error');
+                            const booked = eventClustersByDate[dateStr] || 0;
+                            const totalClusters = parseInt(typeData.event_max_clusters) || 0;
+                            const maxAvailable = Math.max(0, totalClusters - booked);
+                            if (ticketCount > maxAvailable) {
+                                ticketCount = Math.max(1, maxAvailable);
+                                showToast('Capacity updated. Clusters adjusted.', 'error');
                             }
                         }
-                    }
-                    
-                    // Update event blocked dates
-                    const newEventBlocked = response.data.eventBlockedDates || [];
-                    if (JSON.stringify(newEventBlocked) !== JSON.stringify(eventBlockedDates)) {
-                        eventBlockedDates = newEventBlocked;
-                        hasChanges = true;
                     }
                 }
                 
@@ -376,6 +373,9 @@ jQuery(document).ready(function($) {
 
         const localNow = new Date();
         const localTimeMinutes = localNow.getHours() * 60 + localNow.getMinutes();
+        const tourSoldOutDates = (category === 'individual_tour' || category === 'event_tour')
+            ? getTourSoldOutDatesForMonth(year, month, category)
+            : new Set();
 
         for (let day = 1; day <= daysInMonth; day++) {
             const date = new Date(year, month, day);
@@ -390,12 +390,20 @@ jQuery(document).ready(function($) {
             // Check cross-calendar blocking
             let isBlockedByCross = false;
             if (category === 'event_tour') {
-                isBlockedByCross = individualBlockedDates.includes(dateStr) || bookedDates.includes(dateStr);
+                // Independent
             } else if (category === 'individual_tour') {
-                isBlockedByCross = eventBlockedDates.includes(dateStr);
+                // Independent
                 // Also check if capacity is full
                 const booked = ticketsByDate[dateStr] || 0;
-                if (typeData && booked >= typeData.max_daily_capacity) {
+                const totalCapacity = typeData ? (parseInt(typeData.max_daily_capacity, 10) || 50) : 50;
+                if (totalCapacity > 0 && booked >= totalCapacity) {
+                    isBlockedByCross = true;
+                }
+            }
+            if (category === 'event_tour') {
+                const bookedClusters = eventClustersByDate[dateStr] || 0;
+                const maxClusters = parseInt(typeData.event_max_clusters) || 0;
+                if (maxClusters > 0 && bookedClusters >= maxClusters) {
                     isBlockedByCross = true;
                 }
             }
@@ -415,7 +423,7 @@ jQuery(document).ready(function($) {
             // Time-based availability check for Knowledge Hub tours (today only)
             let isTimePassed = false;
             if (isToday && typeData && (category === 'individual_tour' || category === 'event_tour')) {
-                const tourStartTime = getSharedTourStartTime() || typeData.tour_start_time || '00:00';
+                const tourStartTime = typeData.tour_start_time || '00:00';
                 const startParts = tourStartTime.split(':');
                 const tourStartMinutes = parseInt(startParts[0]) * 60 + parseInt(startParts[1] || 0);
 
@@ -425,16 +433,28 @@ jQuery(document).ready(function($) {
                 }
             }
 
-            let isNoHallAvailabilityToday = false;
-            if (isHallCategory(category) && isToday) {
-                isNoHallAvailabilityToday = !hasBookableHallSlots(dateStr, localTimeMinutes);
+            let isSoldOutDate = false;
+            if (category === 'individual_tour' || category === 'event_tour') {
+                isSoldOutDate = tourSoldOutDates.has(dateStr);
             }
 
-            const isDisabled = isPast || isWeekend || isHoliday || isBlockedByCross || isBeyondWindow || isTimePassed || isNoHallAvailabilityToday;
+            let isNoHallAvailabilityDate = false;
+            if (isHallCategory(category)) {
+                if (!isToday && fullyBookedDates.includes(dateStr)) {
+                    isNoHallAvailabilityDate = true;
+                } else {
+                    const timeForCheck = isToday ? localTimeMinutes : -1;
+                    isNoHallAvailabilityDate = !hasBookableHallSlots(dateStr, timeForCheck);
+                }
+            }
+
+            const isDisabled = isPast || isWeekend || isHoliday || isBlockedByCross || isBeyondWindow || isTimePassed || isNoHallAvailabilityDate || isSoldOutDate;
 
             let classes = 'bt-day';
             if (isDisabled) classes += ' bt-day-disabled';
-            if (isTimePassed && !isPast) classes += ' bt-day-time-passed';
+            if (isTimePassed && !isPast && !(category === 'individual_tour' || category === 'event_tour')) {
+                classes += ' bt-day-time-passed';
+            }
             if (isHoliday && !isPast) classes += ' bt-day-holiday';
             if (isWeekend && !isPast && !isHoliday) classes += ' bt-day-weekend';
             if (isToday && !isDisabled) classes += ' bt-day-today';
@@ -579,7 +599,7 @@ jQuery(document).ready(function($) {
         if (isToday && typeData) {
             const localTimeMinutes = localNow.getHours() * 60 + localNow.getMinutes();
             
-            const tourStartTime = getSharedTourStartTime() || typeData.tour_start_time || '00:00';
+            const tourStartTime = typeData.tour_start_time || '00:00';
             const startParts = tourStartTime.split(':');
             const tourStartMinutes = parseInt(startParts[0]) * 60 + parseInt(startParts[1] || 0);
             
@@ -631,16 +651,39 @@ jQuery(document).ready(function($) {
             html += '<button type="button" class="bt-ticket-btn" id="bt-ticket-plus">+</button>';
             html += '</div>';
             html += '</div>';
-			html += '<div class="bt-remaining-capacity"><strong>Available Tickets</strong><span class="bt-capacity-badge" id="bt-remaining-display">' + displayRemaining + ' remaining</span></div>';
+            html += '<div class="bt-remaining-capacity"><strong>Available Tickets</strong><span class="bt-capacity-badge" id="bt-remaining-display">' + displayRemaining + ' remaining</span></div>';
+        } else if (category === 'event_tour') {
+            const booked = eventClustersByDate[dateStr] || 0;
+            const totalClusters = parseInt(typeData.event_max_clusters) || 0;
+            const maxAvailable = Math.max(0, totalClusters - booked);
+            if (maxAvailable <= 0) {
+                html += '<div class="bt-unavailable-notice">';
+                html += '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>';
+                html += '<p>This date is fully booked. Please select another date.</p>';
+                html += '</div>';
+                html += '</div>';
+                $container.html(html);
+                return;
+            }
+            html += '<div class="bt-ticket-selector">';
+            html += '<label>Number of Clusters</label>';
+            html += '<div class="bt-ticket-controls">';
+            html += '<button type="button" class="bt-ticket-btn" id="bt-ticket-minus">−</button>';
+            html += '<span class="bt-ticket-count" id="bt-ticket-display">' + ticketCount + '</span>';
+            html += '<button type="button" class="bt-ticket-btn" id="bt-ticket-plus">+</button>';
+            html += '</div>';
+            html += '</div>';
+            html += '<div class="bt-remaining-capacity"><strong>Available Clusters</strong><span class="bt-capacity-badge" id="bt-remaining-display">' + Math.max(0, totalClusters - booked - ticketCount) + ' remaining</span></div>';
+            html += '<div class="bt-remaining-capacity"><strong>Members per Cluster</strong><span class="bt-capacity-badge">' + (parseInt(typeData.event_members_per_cluster) || 1) + '</span></div>';
         }
         
         html += '</div>';
         $container.html(html);
         
         // Ticket controls with real-time remaining update (only for individual tour)
-        if (category === 'individual_tour') {
-            const booked = ticketsByDate[dateStr] || 0;
-            const totalCapacity = typeData.max_daily_capacity || 50;
+        if (category === 'individual_tour' || category === 'event_tour') {
+            const booked = category === 'individual_tour' ? (ticketsByDate[dateStr] || 0) : (eventClustersByDate[dateStr] || 0);
+            const totalCapacity = category === 'individual_tour' ? (typeData.max_daily_capacity || 50) : (parseInt(typeData.event_max_clusters) || 0);
             const alreadyBooked = booked;
             const maxAvailable = Math.max(0, totalCapacity - alreadyBooked);
             
@@ -666,7 +709,7 @@ jQuery(document).ready(function($) {
                     updateRemainingDisplay();
                     updateUI();
                 } else {
-                    showToast('Maximum ' + maxAvailable + ' tickets available', 'error');
+                    showToast('Maximum ' + maxAvailable + ' available', 'error');
                 }
             });
         }
@@ -703,8 +746,8 @@ jQuery(document).ready(function($) {
             showSummary = true;
             
             if (category === 'event_tour') {
-                totalPrice = parseFloat(typeData.tour_price);
-                $('#bt-summary-content').html('<div class="bt-summary-date">' + formatDateLong(selectedDate) + '</div><div class="bt-summary-tour">Event Tour Booking</div>');
+                totalPrice = parseFloat(typeData.event_cluster_price || 0) * ticketCount;
+                $('#bt-summary-content').html('<div class="bt-summary-date">' + formatDateLong(selectedDate) + '</div><div class="bt-summary-tour">' + ticketCount + ' cluster(s) × BDT ' + parseFloat(typeData.event_cluster_price || 0).toFixed(2) + '</div>');
             } else {
                 totalPrice = parseFloat(typeData.ticket_price) * ticketCount;
                 $('#bt-summary-content').html('<div class="bt-summary-date">' + formatDateLong(selectedDate) + '</div><div class="bt-summary-tour">' + ticketCount + ' ticket(s) × BDT ' + parseFloat(typeData.ticket_price).toFixed(2) + '</div>');
@@ -729,10 +772,7 @@ jQuery(document).ready(function($) {
     }
 
     function resetForm() {
-        selectedDate = null;
-        selectedSlots = [];
-        ticketCount = 1;
-        selectedAddons = {};
+        resetSelectionState();
         $('#bt-booking-form')[0].reset();
         $('.bt-file-label span').text('Choose file (max 1MB)');
         toggleSections();
@@ -741,6 +781,18 @@ jQuery(document).ready(function($) {
         if (isHallCategory(typeData.type_category)) renderSlots();
         else renderTourInfo();
         loadTypeData($('#bt-type-id').val());
+    }
+
+    function resetSelectionState() {
+        selectedDate = null;
+        selectedSlots = [];
+        ticketCount = 1;
+        selectedAddons = {};
+        $('#bt-selected-date').val('');
+        $('#bt-selected-slots').val('');
+        $('#bt-selected-addons').val('{}');
+        $('#bt-addons-list').empty();
+        $('#bt-addons-section').hide();
     }
 
     function toggleSections() {
@@ -869,8 +921,27 @@ jQuery(document).ready(function($) {
         return hour12 + ':' + m + ' ' + ampm;
     }
 
-    function getSharedTourStartTime() {
-        return sharedTourStartTime;
+
+    function getTourSoldOutDatesForMonth(year, month, category) {
+        const result = new Set();
+        if (!typeData) return result;
+
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        for (let day = 1; day <= daysInMonth; day++) {
+            const dateStr = formatDate(new Date(year, month, day));
+            let remaining = 0;
+            if (category === 'individual_tour') {
+                const booked = ticketsByDate[dateStr] || 0;
+                const total = parseInt(typeData.max_daily_capacity, 10) || 50;
+                remaining = Math.max(0, total - booked);
+            } else if (category === 'event_tour') {
+                const booked = eventClustersByDate[dateStr] || 0;
+                const total = parseInt(typeData.event_max_clusters) || 0;
+                remaining = Math.max(0, total - booked);
+            }
+            if (remaining <= 0) result.add(dateStr);
+        }
+        return result;
     }
 
     function isHallCategory(category) {
@@ -904,7 +975,7 @@ jQuery(document).ready(function($) {
                     }
                 }
             }
-            const isPastSlot = serverTimeMinutes >= slotStart;
+            const isPastSlot = serverTimeMinutes >= 0 && serverTimeMinutes >= slotStart;
             return !(isBooked || isOverlapBooked || isPastSlot);
         });
     }
