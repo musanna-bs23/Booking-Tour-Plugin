@@ -25,6 +25,13 @@ jQuery(document).ready(function($) {
         initHolidayCalendar();
     }
 
+    const $hideTourMessage = $('.bt-hide-tour-message');
+    if ($hideTourMessage.length) {
+        setTimeout(function() {
+            $hideTourMessage.fadeOut(300, function() { $(this).remove(); });
+        }, 2500);
+    }
+
     // Filter button
     $('#bt-filter-btn').on('click', function() {
         currentPage = 1;

@@ -32,6 +32,7 @@ function bt_create_schema() {
         type_slug VARCHAR(191) NOT NULL,
         type_category VARCHAR(50) NOT NULL,
         weekend_days VARCHAR(50) NOT NULL DEFAULT '',
+        is_hidden TINYINT(1) NOT NULL DEFAULT 0,
         PRIMARY KEY (type_id)
     ) {$charset_collate};";
 
@@ -40,6 +41,7 @@ function bt_create_schema() {
         type_slug VARCHAR(191) NOT NULL,
         type_category VARCHAR(50) NOT NULL,
         weekend_days VARCHAR(50) NOT NULL DEFAULT '',
+        is_hidden TINYINT(1) NOT NULL DEFAULT 0,
         PRIMARY KEY (type_id)
     ) {$charset_collate};";
 
@@ -48,6 +50,7 @@ function bt_create_schema() {
         type_slug VARCHAR(191) NOT NULL,
         type_category VARCHAR(50) NOT NULL,
         weekend_days VARCHAR(50) NOT NULL DEFAULT '',
+        is_hidden TINYINT(1) NOT NULL DEFAULT 0,
         tour_start_time TIME NOT NULL DEFAULT '09:00:00',
         tour_end_time TIME NOT NULL DEFAULT '17:00:00',
         max_tickets INT NOT NULL DEFAULT 50,
@@ -62,6 +65,7 @@ function bt_create_schema() {
         type_slug VARCHAR(191) NOT NULL,
         type_category VARCHAR(50) NOT NULL,
         weekend_days VARCHAR(50) NOT NULL DEFAULT '',
+        is_hidden TINYINT(1) NOT NULL DEFAULT 0,
         tour_start_time TIME NOT NULL DEFAULT '09:00:00',
         tour_end_time TIME NOT NULL DEFAULT '17:00:00',
         max_clusters INT NOT NULL DEFAULT 0,

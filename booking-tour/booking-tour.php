@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Booking Tour
  * Description: A comprehensive booking system for Multipurpose Hall and Knowledge Hub Tours
- * Version: 1.0.0
+ * Version: 1.1.0
  * Author: Hasan Al Musanna
  */
 
@@ -37,6 +37,7 @@ class BookingTour {
         add_action('wp_ajax_bt_get_booking_data', array($this, 'get_booking_data'));
         add_action('wp_ajax_nopriv_bt_get_booking_data', array($this, 'get_booking_data'));
         add_action('wp_ajax_bt_generate_report', array($this, 'generate_report'));
+        add_action('admin_post_bt_save_hide_tour', array($this, 'save_hide_tour'));
         
         // Slot management (Hall only)
         add_action('wp_ajax_bt_save_slot', array($this, 'save_slot'));
@@ -127,9 +128,10 @@ class BookingTour {
                 'type_id' => $type_id,
                 'type_slug' => $type['slug'],
                 'type_category' => $type['category'],
-                'weekend_days' => ''
+                'weekend_days' => '',
+                'is_hidden' => 0
             );
-            $format = array('%d', '%s', '%s', '%s');
+            $format = array('%d', '%s', '%s', '%s', '%d');
 
             if ($type['category'] === 'individual_tour') {
                 $data['tour_start_time'] = '09:00:00';
@@ -138,7 +140,7 @@ class BookingTour {
                 $data['ticket_price'] = 0;
                 $data['booking_window_mode'] = 'limit';
                 $data['booking_window_days'] = 1;
-                $format = array('%d', '%s', '%s', '%s', '%s', '%s', '%d', '%f', '%s', '%d');
+                $format = array('%d', '%s', '%s', '%s', '%d', '%s', '%s', '%d', '%f', '%s', '%d');
             }
 
             if ($type['category'] === 'event_tour') {
@@ -147,7 +149,7 @@ class BookingTour {
                 $data['max_clusters'] = 0;
                 $data['members_per_cluster'] = 1;
                 $data['price_per_cluster'] = 0;
-                $format = array('%d', '%s', '%s', '%s', '%s', '%s', '%d', '%d', '%f');
+                $format = array('%d', '%s', '%s', '%s', '%d', '%s', '%s', '%d', '%d', '%f');
             }
 
             $wpdb->insert($table, $data, $format);
@@ -184,6 +186,7 @@ class BookingTour {
                 COALESCE(h.type_slug, s.type_slug, i.type_slug, e.type_slug) AS type_slug,
                 COALESCE(h.type_category, s.type_category, i.type_category, e.type_category) AS type_category,
                 COALESCE(h.weekend_days, s.weekend_days, i.weekend_days, e.weekend_days) AS weekend_days,
+                COALESCE(h.is_hidden, s.is_hidden, i.is_hidden, e.is_hidden) AS is_hidden,
                 COALESCE(i.tour_start_time, e.tour_start_time) AS tour_start_time,
                 COALESCE(i.tour_end_time, e.tour_end_time) AS tour_end_time,
                 i.max_tickets AS max_daily_capacity,
@@ -519,6 +522,9 @@ class BookingTour {
         }
         ?>
         <div class="wrap bt-admin-wrap">
+            <?php if (isset($_GET['bt_hide_updated']) && $_GET['bt_hide_updated'] === '1'): ?>
+                <div class="bt-message bt-message-success bt-hide-tour-message">Settings saved successfully!</div>
+            <?php endif; ?>
             <h1>
                 <svg class="bt-icon-title" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <?php if ($type->type_category === 'hall' || $type->type_category === 'staircase'): ?>
@@ -556,6 +562,39 @@ class BookingTour {
                         <?php endforeach; ?>
                     </div>
                     <p class="bt-hint">Select recurring days to block from booking</p>
+                    <button type="submit" class="button button-primary bt-save-btn">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                            <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                            <polyline points="7 3 7 8 15 8"></polyline>
+                        </svg>
+                        Save Settings
+                    </button>
+                </form>
+            </div>
+
+            <div class="bt-settings-card">
+                <h2>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="12" y1="8" x2="12" y2="12"></line>
+                        <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                    </svg>
+                    Hide Tour
+                </h2>
+                <form id="bt-hide-tour-form" class="bt-hide-tour-form" method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
+                    <?php wp_nonce_field('bt_hide_tour_save', 'bt_hide_tour_nonce'); ?>
+                    <input type="hidden" name="action" value="bt_save_hide_tour">
+                    <input type="hidden" name="type_id" value="<?php echo esc_attr($type->id); ?>">
+                    <div class="bt-input-row">
+                        <div class="bt-input-group">
+                            <label>Hide this tour?</label>
+                            <select id="bt-hide-tour" name="hide_tour">
+                                <option value="0" <?php selected(intval($type->is_hidden), 0); ?>>No</option>
+                                <option value="1" <?php selected(intval($type->is_hidden), 1); ?>>Yes</option>
+                            </select>
+                        </div>
+                    </div>
                     <button type="submit" class="button button-primary bt-save-btn">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
                             <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
@@ -994,6 +1033,11 @@ class BookingTour {
             }
             $format[] = '%s';
         }
+
+        if (isset($_POST['hide_tour'])) {
+            $data['is_hidden'] = intval($_POST['hide_tour']) ? 1 : 0;
+            $format[] = '%d';
+        }
         
         // Tour settings
         if (isset($_POST['tour_start_time'])) {
@@ -1066,6 +1110,39 @@ class BookingTour {
         }
 
         wp_send_json_success('Settings saved successfully');
+    }
+
+    public function save_hide_tour() {
+        if (!current_user_can('manage_options')) {
+            wp_die('Unauthorized');
+        }
+        check_admin_referer('bt_hide_tour_save', 'bt_hide_tour_nonce');
+
+        $type_id = isset($_POST['type_id']) ? intval($_POST['type_id']) : 0;
+        $hide_tour = isset($_POST['hide_tour']) ? intval($_POST['hide_tour']) : 0;
+
+        $type = $this->get_type_by_id($type_id);
+        if (!$type) {
+            wp_die('Invalid booking type');
+        }
+        $table = $this->get_type_table_by_category($type->type_category);
+        if (empty($table)) {
+            wp_die('Invalid booking type');
+        }
+
+        global $wpdb;
+        $wpdb->update(
+            $table,
+            array('is_hidden' => $hide_tour ? 1 : 0),
+            array('type_id' => $type_id),
+            array('%d'),
+            array('%d')
+        );
+
+        $redirect = admin_url('admin.php?page=booking-tour-' . $type->type_slug);
+        $redirect = add_query_arg('bt_hide_updated', '1', $redirect);
+        wp_safe_redirect($redirect);
+        exit;
     }
 
     public function get_addons() {
@@ -2315,6 +2392,18 @@ class BookingTour {
             return '<p>Booking system is not configured properly.</p>';
         }
 
+        $visible_types = array();
+        foreach (array($hall_type, $staircase_type, $individual_type, $event_type) as $type) {
+            if (!$type || intval($type->is_hidden) === 1) {
+                continue;
+            }
+            $visible_types[] = $type;
+        }
+        if (empty($visible_types)) {
+            return '<p>No booking types are currently available.</p>';
+        }
+        $default_type = $visible_types[0];
+
         ob_start();
         ?>
         <div class="bt-booking-container" data-mode="merged">
@@ -2330,28 +2419,35 @@ class BookingTour {
             </div>
 
             <div class="bt-tour-selector bt-tour-selector-merged">
-                <button class="bt-tour-btn active" data-type-id="<?php echo esc_attr($hall_type->id); ?>" data-category="hall">
+                <?php if (intval($hall_type->is_hidden) !== 1): ?>
+                <button class="bt-tour-btn <?php echo $default_type->id === $hall_type->id ? 'active' : ''; ?>" data-type-id="<?php echo esc_attr($hall_type->id); ?>" data-category="hall">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
                         <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
                         <polyline points="9 22 9 12 15 12 15 22"></polyline>
                     </svg>
                     <span>Multipurpose Hall</span>
                 </button>
-                <button class="bt-tour-btn" data-type-id="<?php echo esc_attr($staircase_type->id); ?>" data-category="staircase">
+                <?php endif; ?>
+                <?php if (intval($staircase_type->is_hidden) !== 1): ?>
+                <button class="bt-tour-btn <?php echo $default_type->id === $staircase_type->id ? 'active' : ''; ?>" data-type-id="<?php echo esc_attr($staircase_type->id); ?>" data-category="staircase">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
                         <path d="M3 21h4v-4h4v-4h4v-4h6"></path>
                         <path d="M3 7h4v4H3z"></path>
                     </svg>
                     <span>Staircase Book</span>
                 </button>
-                <button class="bt-tour-btn" data-type-id="<?php echo esc_attr($individual_type->id); ?>" data-category="individual_tour">
+                <?php endif; ?>
+                <?php if (intval($individual_type->is_hidden) !== 1): ?>
+                <button class="bt-tour-btn <?php echo $default_type->id === $individual_type->id ? 'active' : ''; ?>" data-type-id="<?php echo esc_attr($individual_type->id); ?>" data-category="individual_tour">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
                         <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
                         <circle cx="12" cy="7" r="4"></circle>
                     </svg>
                     <span>Individual Booking</span>
                 </button>
-                <button class="bt-tour-btn" data-type-id="<?php echo esc_attr($event_type->id); ?>" data-category="event_tour">
+                <?php endif; ?>
+                <?php if (intval($event_type->is_hidden) !== 1): ?>
+                <button class="bt-tour-btn <?php echo $default_type->id === $event_type->id ? 'active' : ''; ?>" data-type-id="<?php echo esc_attr($event_type->id); ?>" data-category="event_tour">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
                         <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
                         <circle cx="9" cy="7" r="4"></circle>
@@ -2360,10 +2456,11 @@ class BookingTour {
                     </svg>
                     <span>Event Booking</span>
                 </button>
+                <?php endif; ?>
             </div>
 
-            <input type="hidden" id="bt-type-id" value="<?php echo esc_attr($hall_type->id); ?>">
-            <input type="hidden" id="bt-type-category" value="hall">
+            <input type="hidden" id="bt-type-id" value="<?php echo esc_attr($default_type->id); ?>">
+            <input type="hidden" id="bt-type-category" value="<?php echo esc_attr($default_type->type_category); ?>">
             <input type="hidden" id="bt-hall-type-id" value="<?php echo esc_attr($hall_type->id); ?>">
             <input type="hidden" id="bt-staircase-type-id" value="<?php echo esc_attr($staircase_type->id); ?>">
             <input type="hidden" id="bt-event-type-id" value="<?php echo esc_attr($event_type->id); ?>">

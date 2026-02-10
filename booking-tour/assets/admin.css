@@ -676,6 +676,10 @@
     gap: 8px;
 }
 
+.bt-hide-tour-form .bt-input-row {
+    margin-bottom: 14px;
+}
+
 @media (max-width: 900px) {
     .bt-addons-row-admin {
         grid-template-columns: 1fr 1fr;

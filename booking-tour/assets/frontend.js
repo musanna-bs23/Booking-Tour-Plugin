@@ -573,6 +573,11 @@ jQuery(document).ready(function($) {
                 selectedSlots.splice(index, 1);
                 $(this).removeClass('bt-slot-selected');
             } else {
+                const slotObj = slots.find(s => parseInt(s.id) === slotId);
+                if (slotObj && hasSelectionConflict(slotObj)) {
+                    showToast('Time conflict: this slot overlaps with your selected slot(s).', 'error', 2500);
+                    return;
+                }
                 selectedSlots.push(slotId);
                 $(this).addClass('bt-slot-selected');
             }
@@ -980,6 +985,23 @@ jQuery(document).ready(function($) {
         });
     }
 
+    function hasSelectionConflict(candidateSlot) {
+        if (!candidateSlot || !selectedSlots.length) return false;
+        const candStart = timeToMinutes(candidateSlot.start_time);
+        const candEnd = timeToMinutes(candidateSlot.end_time);
+        for (let i = 0; i < selectedSlots.length; i++) {
+            const selectedId = parseInt(selectedSlots[i]);
+            const existing = slots.find(s => parseInt(s.id) === selectedId);
+            if (!existing) continue;
+            const existingStart = timeToMinutes(existing.start_time);
+            const existingEnd = timeToMinutes(existing.end_time);
+            if (intervalsOverlap(candStart, candEnd, existingStart, existingEnd)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     function timeToMinutes(time) {
         if (!time) return 0;
         const parts = time.split(':');
@@ -999,9 +1021,10 @@ jQuery(document).ready(function($) {
         return div.innerHTML;
     }
 
-    function showToast(message, type) {
+    function showToast(message, type, durationMs) {
         const $toast = $('#bt-toast');
         $toast.removeClass('bt-toast-success bt-toast-error bt-toast-show').addClass('bt-toast-' + type + ' bt-toast-show').text(message);
-        setTimeout(function() { $toast.removeClass('bt-toast-show'); }, 4000);
+        const timeout = typeof durationMs === 'number' ? durationMs : 4000;
+        setTimeout(function() { $toast.removeClass('bt-toast-show'); }, timeout);
     }
 });
