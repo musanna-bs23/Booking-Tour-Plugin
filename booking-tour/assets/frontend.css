@@ -494,7 +494,10 @@
 }
 
 .bt-slots-container {
-    min-height: 280px;
+    height: 380px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-right: 4px;
 }
 
 .bt-placeholder {
@@ -502,7 +505,7 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    height: 280px;
+    height: 100%;
     text-align: center;
     color: var(--bt-text-light);
 }
@@ -1156,5 +1159,11 @@
         left: 16px;
         right: 16px;
         bottom: 16px;
+    }
+}
+
+@media (max-width: 768px) {
+    .bt-slots-container {
+        height: 320px;
     }
 }
