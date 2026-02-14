@@ -28,12 +28,15 @@ jQuery(document).ready(function($) {
     let serverDate = btFrontend.serverDate || '';
     let pollInterval = null;
     let ticketCount = 1;
+    let eventClusterHours = [1];
+    let activeClusterHourIndex = -1;
     let mode = $('.bt-booking-container').data('mode');
 
     // Initialize
     const initialTypeId = $('#bt-type-id').val();
     if (initialTypeId) loadTypeData(initialTypeId);
     toggleSections();
+    ensureClusterHourModal();
 
     // Tour type selection
     $('.bt-tour-btn').on('click', function() {
@@ -136,6 +139,7 @@ jQuery(document).ready(function($) {
         formData.append('booking_date', formatDate(selectedDate));
         formData.append('slot_ids', selectedSlots.join(','));
         formData.append('ticket_count', ticketCount);
+        formData.append('cluster_hours', JSON.stringify(eventClusterHours));
         formData.append('total_price', $('#bt-total-price').val());
         formData.append('addons', $('#bt-selected-addons').val());
         formData.append('customer_name', name);
@@ -326,7 +330,8 @@ jQuery(document).ready(function($) {
                             const totalClusters = parseInt(typeData.event_max_clusters) || 0;
                             const maxAvailable = Math.max(0, totalClusters - booked);
                             if (ticketCount > maxAvailable) {
-                                ticketCount = Math.max(1, maxAvailable);
+                                ticketCount = Math.max(0, maxAvailable);
+                                ensureEventClusterHoursSync();
                                 showToast('Capacity updated. Clusters adjusted.', 'error');
                             }
                         }
@@ -473,7 +478,8 @@ jQuery(document).ready(function($) {
             
             selectedDate = new Date($(this).data('date') + 'T00:00:00');
             selectedSlots = [];
-            ticketCount = 1;
+            ticketCount = getMinTicketCount(typeData.type_category);
+            eventClusterHours = [1];
             selectedAddons = {};
             
             if (isHallCategory(typeData.type_category)) renderSlots();
@@ -691,6 +697,7 @@ jQuery(document).ready(function($) {
             const totalCapacity = category === 'individual_tour' ? (typeData.max_daily_capacity || 50) : (parseInt(typeData.event_max_clusters) || 0);
             const alreadyBooked = booked;
             const maxAvailable = Math.max(0, totalCapacity - alreadyBooked);
+            const minTicket = getMinTicketCount(category);
             
             function updateRemainingDisplay() {
                 // Remaining = Total - Already booked - Currently selected
@@ -699,8 +706,11 @@ jQuery(document).ready(function($) {
             }
             
             $('#bt-ticket-minus').on('click', function() {
-                if (ticketCount > 1) {
+                if (ticketCount > minTicket) {
                     ticketCount--;
+                    if (category === 'event_tour') {
+                        ensureEventClusterHoursSync();
+                    }
                     $('#bt-ticket-display').text(ticketCount);
                     updateRemainingDisplay();
                     updateUI();
@@ -710,9 +720,15 @@ jQuery(document).ready(function($) {
             $('#bt-ticket-plus').on('click', function() {
                 if (ticketCount < maxAvailable) {
                     ticketCount++;
+                    if (category === 'event_tour') {
+                        ensureEventClusterHoursSync(true);
+                    }
                     $('#bt-ticket-display').text(ticketCount);
                     updateRemainingDisplay();
                     updateUI();
+                    if (category === 'event_tour') {
+                        openClusterHourModal(ticketCount - 1);
+                    }
                 } else {
                     showToast('Maximum ' + maxAvailable + ' available', 'error');
                 }
@@ -748,14 +764,26 @@ jQuery(document).ready(function($) {
                 totalPrice += addonsTotal;
             }
         } else if ((category === 'event_tour' || category === 'individual_tour') && selectedDate) {
+            if ((category === 'event_tour' || category === 'individual_tour') && ticketCount <= 0) {
+                showSummary = false;
+            } else {
             showSummary = true;
             
             if (category === 'event_tour') {
-                totalPrice = parseFloat(typeData.event_cluster_price || 0) * ticketCount;
-                $('#bt-summary-content').html('<div class="bt-summary-date">' + formatDateLong(selectedDate) + '</div><div class="bt-summary-tour">' + ticketCount + ' cluster(s) × BDT ' + parseFloat(typeData.event_cluster_price || 0).toFixed(2) + '</div>');
+                ensureEventClusterHoursSync();
+                const rate = parseFloat(typeData.event_cluster_price || 0);
+                let detailsHtml = '';
+                totalPrice = 0;
+                eventClusterHours.forEach(function(hours, index) {
+                    const subtotal = rate * hours;
+                    totalPrice += subtotal;
+                    detailsHtml += '<div class="bt-summary-slot"><span>Cluster ' + (index + 1) + ' (' + hours + 'h × BDT ' + rate.toFixed(2) + ')</span><span>BDT ' + subtotal.toFixed(2) + '</span></div>';
+                });
+                $('#bt-summary-content').html('<div class="bt-summary-date">' + formatDateLong(selectedDate) + '</div><div class="bt-summary-slots">' + detailsHtml + '</div>');
             } else {
                 totalPrice = parseFloat(typeData.ticket_price) * ticketCount;
                 $('#bt-summary-content').html('<div class="bt-summary-date">' + formatDateLong(selectedDate) + '</div><div class="bt-summary-tour">' + ticketCount + ' ticket(s) × BDT ' + parseFloat(typeData.ticket_price).toFixed(2) + '</div>');
+            }
             }
         }
         
@@ -791,7 +819,8 @@ jQuery(document).ready(function($) {
     function resetSelectionState() {
         selectedDate = null;
         selectedSlots = [];
-        ticketCount = 1;
+        ticketCount = getMinTicketCount($('#bt-type-category').val());
+        eventClusterHours = [1];
         selectedAddons = {};
         $('#bt-selected-date').val('');
         $('#bt-selected-slots').val('');
@@ -1000,6 +1029,98 @@ jQuery(document).ready(function($) {
             }
         }
         return false;
+    }
+
+    function ensureEventClusterHoursSync(appendDefault) {
+        const maxHours = Math.max(1, parseInt((typeData && typeData.event_max_hours_per_cluster) || 1));
+        if (!Array.isArray(eventClusterHours)) {
+            eventClusterHours = [];
+        }
+        if (appendDefault && eventClusterHours.length < ticketCount) {
+            eventClusterHours.push(1);
+        }
+        while (eventClusterHours.length < ticketCount) {
+            eventClusterHours.push(1);
+        }
+        if (eventClusterHours.length > ticketCount) {
+            eventClusterHours = eventClusterHours.slice(0, ticketCount);
+        }
+        eventClusterHours = eventClusterHours.map(function(hours) {
+            return Math.max(1, Math.min(maxHours, parseInt(hours) || 1));
+        });
+    }
+
+    function getMinTicketCount(category) {
+        return (category === 'event_tour' || category === 'individual_tour') ? 0 : 1;
+    }
+
+    function ensureClusterHourModal() {
+        if ($('#bt-cluster-hour-modal').length) return;
+        const modalHtml = '' +
+            '<div class="bt-hour-modal" id="bt-cluster-hour-modal" style="display:none;">' +
+            '<div class="bt-hour-modal-overlay"></div>' +
+            '<div class="bt-hour-modal-content">' +
+            '<h4 class="bt-hour-modal-title">Set Hours for Cluster <span id="bt-hour-modal-cluster-index">1</span></h4>' +
+            '<div class="bt-ticket-controls">' +
+            '<button type="button" class="bt-ticket-btn" id="bt-hour-modal-minus">−</button>' +
+            '<span class="bt-ticket-count" id="bt-hour-modal-value">1h</span>' +
+            '<button type="button" class="bt-ticket-btn" id="bt-hour-modal-plus">+</button>' +
+            '</div>' +
+            '<div class="bt-hour-modal-actions">' +
+            '<button type="button" class="bt-submit-btn" id="bt-hour-modal-ok">OK</button>' +
+            '</div>' +
+            '</div>' +
+            '</div>';
+        $('body').append(modalHtml);
+
+        $('#bt-hour-modal-minus').on('click', function() {
+            if (activeClusterHourIndex < 0) return;
+            const current = eventClusterHours[activeClusterHourIndex] || 1;
+            if (current > 1) {
+                eventClusterHours[activeClusterHourIndex] = current - 1;
+                refreshClusterHourModal();
+                updateUI();
+            }
+        });
+        $('#bt-hour-modal-plus').on('click', function() {
+            if (activeClusterHourIndex < 0) return;
+            const maxHours = Math.max(1, parseInt((typeData && typeData.event_max_hours_per_cluster) || 1));
+            const current = eventClusterHours[activeClusterHourIndex] || 1;
+            if (current < maxHours) {
+                eventClusterHours[activeClusterHourIndex] = current + 1;
+                refreshClusterHourModal();
+                updateUI();
+            } else {
+                showToast('Maximum ' + maxHours + ' hour(s) allowed for this cluster.', 'error');
+            }
+        });
+        $('#bt-hour-modal-ok').on('click', function() {
+            closeClusterHourModal();
+        });
+        $('#bt-cluster-hour-modal .bt-hour-modal-overlay').on('click', function() {
+            closeClusterHourModal();
+        });
+    }
+
+    function openClusterHourModal(clusterIndex) {
+        if (clusterIndex < 0) return;
+        ensureEventClusterHoursSync();
+        activeClusterHourIndex = clusterIndex;
+        refreshClusterHourModal();
+        $('#bt-cluster-hour-modal').fadeIn(120);
+    }
+
+    function closeClusterHourModal() {
+        activeClusterHourIndex = -1;
+        $('#bt-cluster-hour-modal').fadeOut(120);
+    }
+
+    function refreshClusterHourModal() {
+        if (activeClusterHourIndex < 0) return;
+        const maxHours = Math.max(1, parseInt((typeData && typeData.event_max_hours_per_cluster) || 1));
+        const hours = eventClusterHours[activeClusterHourIndex] || 1;
+        $('#bt-hour-modal-cluster-index').text(activeClusterHourIndex + 1);
+        $('#bt-hour-modal-value').text(hours + 'h');
     }
 
     function timeToMinutes(time) {

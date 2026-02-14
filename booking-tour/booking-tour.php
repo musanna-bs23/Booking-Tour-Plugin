@@ -19,6 +19,9 @@ class BookingTour {
     public function __construct() {
         register_activation_hook(__FILE__, array($this, 'activate'));
         $this->ensure_default_types();
+        $this->ensure_event_hours_column();
+        $this->ensure_booking_cluster_hours_column();
+        $this->ensure_booking_cluster_time_ranges_column();
         add_action('admin_menu', array($this, 'add_admin_menu'));
         add_action('admin_enqueue_scripts', array($this, 'admin_scripts'));
         add_action('wp_enqueue_scripts', array($this, 'frontend_scripts'));
@@ -33,6 +36,7 @@ class BookingTour {
         add_action('wp_ajax_nopriv_bt_submit_booking', array($this, 'submit_booking'));
         add_action('wp_ajax_bt_get_bookings', array($this, 'get_bookings'));
         add_action('wp_ajax_bt_update_booking_status', array($this, 'update_booking_status'));
+        add_action('wp_ajax_bt_save_cluster_times', array($this, 'save_cluster_times'));
         add_action('wp_ajax_bt_delete_booking', array($this, 'delete_booking'));
         add_action('wp_ajax_bt_get_booking_data', array($this, 'get_booking_data'));
         add_action('wp_ajax_nopriv_bt_get_booking_data', array($this, 'get_booking_data'));
@@ -74,6 +78,9 @@ class BookingTour {
             wp_mkdir_p($bt_dir);
         }
         $this->ensure_default_types();
+        $this->ensure_event_hours_column();
+        $this->ensure_booking_cluster_hours_column();
+        $this->ensure_booking_cluster_time_ranges_column();
     }
 
     private function ensure_default_types() {
@@ -149,7 +156,8 @@ class BookingTour {
                 $data['max_clusters'] = 0;
                 $data['members_per_cluster'] = 1;
                 $data['price_per_cluster'] = 0;
-                $format = array('%d', '%s', '%s', '%s', '%d', '%s', '%s', '%d', '%d', '%f');
+                $data['max_hours_per_cluster'] = 1;
+                $format = array('%d', '%s', '%s', '%s', '%d', '%s', '%s', '%d', '%d', '%f', '%d');
             }
 
             $wpdb->insert($table, $data, $format);
@@ -169,6 +177,42 @@ class BookingTour {
                 return $wpdb->prefix . 'bt_event_tour_types';
             default:
                 return '';
+        }
+    }
+
+    private function ensure_event_hours_column() {
+        global $wpdb;
+        $table = $wpdb->prefix . 'bt_event_tour_types';
+        $column_exists = $wpdb->get_var($wpdb->prepare(
+            "SHOW COLUMNS FROM {$table} LIKE %s",
+            'max_hours_per_cluster'
+        ));
+        if (!$column_exists) {
+            $wpdb->query("ALTER TABLE {$table} ADD COLUMN max_hours_per_cluster INT NOT NULL DEFAULT 1");
+        }
+    }
+
+    private function ensure_booking_cluster_hours_column() {
+        global $wpdb;
+        $table = $wpdb->prefix . 'bt_bookings';
+        $column_exists = $wpdb->get_var($wpdb->prepare(
+            "SHOW COLUMNS FROM {$table} LIKE %s",
+            'cluster_hours'
+        ));
+        if (!$column_exists) {
+            $wpdb->query("ALTER TABLE {$table} ADD COLUMN cluster_hours TEXT AFTER slot_ids");
+        }
+    }
+
+    private function ensure_booking_cluster_time_ranges_column() {
+        global $wpdb;
+        $table = $wpdb->prefix . 'bt_bookings';
+        $column_exists = $wpdb->get_var($wpdb->prepare(
+            "SHOW COLUMNS FROM {$table} LIKE %s",
+            'cluster_time_ranges'
+        ));
+        if (!$column_exists) {
+            $wpdb->query("ALTER TABLE {$table} ADD COLUMN cluster_time_ranges TEXT AFTER cluster_hours");
         }
     }
 
@@ -195,7 +239,8 @@ class BookingTour {
                 i.booking_window_days AS booking_window_days,
                 e.max_clusters AS event_max_clusters,
                 e.members_per_cluster AS event_members_per_cluster,
-                e.price_per_cluster AS event_cluster_price
+                e.price_per_cluster AS event_cluster_price,
+                e.max_hours_per_cluster AS event_max_hours_per_cluster
             FROM {$types} t
             LEFT JOIN {$hall} h ON h.type_id = t.id
             LEFT JOIN {$stair} s ON s.type_id = t.id
@@ -246,6 +291,41 @@ class BookingTour {
 
     private function get_type_category_sql() {
         return "COALESCE(h.type_category, s.type_category, i.type_category, e.type_category)";
+    }
+
+    private function time_string_to_minutes($time_string) {
+        $parts = explode(':', $time_string);
+        $hours = isset($parts[0]) ? intval($parts[0]) : 0;
+        $minutes = isset($parts[1]) ? intval($parts[1]) : 0;
+        return ($hours * 60) + $minutes;
+    }
+
+    private function minutes_to_time_string($minutes) {
+        $minutes = max(0, min((24 * 60) - 1, intval($minutes)));
+        $hours = floor($minutes / 60);
+        $mins = $minutes % 60;
+        return sprintf('%02d:%02d:00', $hours, $mins);
+    }
+
+    private function build_default_cluster_time_ranges($tour_start_time, $tour_end_time, $cluster_hours) {
+        $start_minutes = $this->time_string_to_minutes($tour_start_time);
+        $end_minutes = $this->time_string_to_minutes($tour_end_time);
+        if ($end_minutes <= $start_minutes) {
+            $end_minutes = $start_minutes + (24 * 60);
+        }
+        $cursor = $start_minutes;
+        $ranges = array();
+        foreach ($cluster_hours as $hours) {
+            $duration = max(1, intval($hours)) * 60;
+            $cluster_start = $cursor;
+            $cluster_end = min($cursor + $duration, $end_minutes);
+            $ranges[] = array(
+                'start' => $this->minutes_to_time_string($cluster_start % (24 * 60)),
+                'end' => $this->minutes_to_time_string($cluster_end % (24 * 60))
+            );
+            $cursor = $cluster_end;
+        }
+        return $ranges;
     }
 
     public function add_admin_menu() {
@@ -712,6 +792,7 @@ class BookingTour {
                 $event_max_clusters = intval($type->event_max_clusters);
                 $event_members_per_cluster = intval($type->event_members_per_cluster);
                 $event_cluster_price = floatval($type->event_cluster_price);
+                $event_max_hours_per_cluster = max(1, intval($type->event_max_hours_per_cluster));
             ?>
             <div class="bt-settings-card">
                 <h2>
@@ -744,8 +825,12 @@ class BookingTour {
                             <input type="number" id="bt-event-members-per-cluster" value="<?php echo esc_attr($event_members_per_cluster); ?>" min="1">
                         </div>
                         <div class="bt-input-group">
-                            <label>Price per Cluster (BDT)</label>
+                            <label>Price per Cluster per Hour (BDT)</label>
                             <input type="number" id="bt-event-cluster-price" value="<?php echo esc_attr($event_cluster_price); ?>" min="0" step="0.01">
+                        </div>
+                        <div class="bt-input-group">
+                            <label>Max Hours per Cluster</label>
+                            <input type="number" id="bt-event-max-hours-per-cluster" value="<?php echo esc_attr($event_max_hours_per_cluster); ?>" min="1" readonly>
                         </div>
                     </div>
                     <button class="button button-primary bt-save-tour-btn" id="bt-save-tour" data-type-id="<?php echo esc_attr($type->id); ?>">
@@ -1081,6 +1166,19 @@ class BookingTour {
                 $data['price_per_cluster'] = floatval($_POST['event_cluster_price']);
                 $format[] = '%f';
             }
+        }
+        if ($type->type_category === 'event_tour' && isset($_POST['tour_start_time']) && isset($_POST['tour_end_time'])) {
+            $start_time = sanitize_text_field($_POST['tour_start_time']);
+            $end_time = sanitize_text_field($_POST['tour_end_time']);
+            $start_minutes = $this->time_string_to_minutes($start_time);
+            $end_minutes = $this->time_string_to_minutes($end_time);
+            $duration_minutes = $end_minutes - $start_minutes;
+            if ($duration_minutes < 0) {
+                $duration_minutes += (24 * 60);
+            }
+            $max_hours = max(1, (int) ceil($duration_minutes / 60));
+            $data['max_hours_per_cluster'] = $max_hours;
+            $format[] = '%d';
         }
 
         if (isset($_POST['booking_window_mode'])) {
@@ -1483,6 +1581,7 @@ class BookingTour {
         $booking_date = sanitize_text_field($_POST['booking_date']);
         $slot_ids = isset($_POST['slot_ids']) ? sanitize_text_field($_POST['slot_ids']) : '';
         $ticket_count = isset($_POST['ticket_count']) ? intval($_POST['ticket_count']) : 1;
+        $cluster_hours_json = isset($_POST['cluster_hours']) ? wp_unslash($_POST['cluster_hours']) : '';
         $addons_json = isset($_POST['addons']) ? wp_unslash($_POST['addons']) : '';
         $total_price = floatval($_POST['total_price']);
         $customer_name = sanitize_text_field($_POST['customer_name']);
@@ -1490,6 +1589,8 @@ class BookingTour {
         $customer_phone = sanitize_text_field($_POST['customer_phone']);
         $transaction_id = sanitize_text_field($_POST['transaction_id']);
         $notes = sanitize_textarea_field($_POST['notes']);
+        $cluster_hours_for_save = '';
+        $cluster_time_ranges_for_save = '';
 
         // Validate required fields
         if (empty($type_id) || empty($booking_date) || 
@@ -1624,6 +1725,7 @@ class BookingTour {
             $total_price = $slot_total + $addons_total;
         } elseif ($type->type_category === 'event_tour') {
             $max_clusters = intval($type->event_max_clusters);
+            $max_hours_per_cluster = max(1, intval($type->event_max_hours_per_cluster));
             $total_booked = $wpdb->get_var($wpdb->prepare(
                 "SELECT COALESCE(SUM(ticket_count), 0) FROM {$wpdb->prefix}bt_bookings 
                  WHERE booking_type_id = %d AND booking_date = %s AND status IN ('pending', 'approved')",
@@ -1632,6 +1734,25 @@ class BookingTour {
             if (($total_booked + $ticket_count) > $max_clusters) {
                 wp_send_json_error('Not enough clusters available. Only ' . max(0, ($max_clusters - $total_booked)) . ' remaining.');
             }
+            $cluster_hours = json_decode($cluster_hours_json, true);
+            if (!is_array($cluster_hours)) {
+                $cluster_hours = array_fill(0, max(1, $ticket_count), 1);
+            }
+            $cluster_hours = array_values($cluster_hours);
+            if (count($cluster_hours) < $ticket_count) {
+                $cluster_hours = array_pad($cluster_hours, $ticket_count, 1);
+            } elseif (count($cluster_hours) > $ticket_count) {
+                $cluster_hours = array_slice($cluster_hours, 0, $ticket_count);
+            }
+            $hour_units = 0;
+            foreach ($cluster_hours as $hours) {
+                $normalized = max(1, min($max_hours_per_cluster, intval($hours)));
+                $hour_units += $normalized;
+                $cluster_hours_for_save .= ($cluster_hours_for_save === '' ? '' : ',') . strval($normalized);
+            }
+            $cluster_time_ranges = $this->build_default_cluster_time_ranges($type->tour_start_time, $type->tour_end_time, $cluster_hours);
+            $cluster_time_ranges_for_save = wp_json_encode($cluster_time_ranges);
+            $total_price = floatval($type->event_cluster_price) * $hour_units;
         } elseif ($type->type_category === 'individual_tour') {
             // Check capacity
             $total_booked = $wpdb->get_var($wpdb->prepare(
@@ -1651,6 +1772,8 @@ class BookingTour {
                 'booking_type_id' => $type_id,
                 'booking_date' => $booking_date,
                 'slot_ids' => $slot_ids,
+                'cluster_hours' => $cluster_hours_for_save,
+                'cluster_time_ranges' => $cluster_time_ranges_for_save,
                 'ticket_count' => $ticket_count,
                 'total_price' => $total_price,
                 'customer_name' => $customer_name,
@@ -1661,7 +1784,7 @@ class BookingTour {
                 'notes' => $notes,
                 'status' => 'pending'
             ),
-            array('%d', '%s', '%s', '%d', '%f', '%s', '%s', '%s', '%s', '%s', '%s', '%s')
+            array('%d', '%s', '%s', '%s', '%s', '%d', '%f', '%s', '%s', '%s', '%s', '%s', '%s', '%s')
         );
 
         if ($wpdb->insert_id) {
@@ -1747,7 +1870,7 @@ class BookingTour {
         wp_mail($admin_email, $subject, $message, $headers);
     }
 
-    private function send_confirmation_email($customer_email, $customer_name, $type, $date, $slot_ids = '', $ticket_count = 1, $total_price = null) {
+    private function send_confirmation_email($customer_email, $customer_name, $type, $date, $slot_ids = '', $ticket_count = 1, $total_price = null, $cluster_hours_csv = '', $cluster_time_ranges_json = '', $event_cluster_rate = null) {
         global $wpdb;
         
         $subject = 'Booking Confirmed - ' . $type->type_name;
@@ -1776,6 +1899,42 @@ class BookingTour {
             $message .= "Tour Time: " . date('g:i A', strtotime($type->tour_start_time)) . " - " . date('g:i A', strtotime($type->tour_end_time)) . "\n";
             if ($type->type_category === 'individual_tour') {
                 $message .= "Number of Tickets: $ticket_count\n";
+            } elseif ($type->type_category === 'event_tour') {
+                $message .= "Clusters: " . intval($ticket_count) . "\n";
+                $hours = array();
+                if (!empty($cluster_hours_csv)) {
+                    $hours = array_map('intval', explode(',', $cluster_hours_csv));
+                }
+                $hours = array_values(array_filter($hours, function($v) {
+                    return intval($v) > 0;
+                }));
+                if (count($hours) < intval($ticket_count)) {
+                    $hours = array_pad($hours, intval($ticket_count), 1);
+                } elseif (count($hours) > intval($ticket_count)) {
+                    $hours = array_slice($hours, 0, intval($ticket_count));
+                }
+
+                $ranges = json_decode($cluster_time_ranges_json, true);
+                if (!is_array($ranges)) {
+                    $ranges = array();
+                }
+                $rate = is_null($event_cluster_rate) ? 0 : floatval($event_cluster_rate);
+                if ($rate <= 0) {
+                    $sum_hours = array_sum($hours);
+                    if ($sum_hours > 0 && !is_null($total_price)) {
+                        $rate = floatval($total_price) / $sum_hours;
+                    }
+                }
+
+                $message .= "Cluster Breakdown:\n";
+                foreach ($hours as $idx => $hour_count) {
+                    $line_total = $rate * $hour_count;
+                    $time_text = '';
+                    if (isset($ranges[$idx]) && is_array($ranges[$idx]) && !empty($ranges[$idx]['start']) && !empty($ranges[$idx]['end'])) {
+                        $time_text = ' [' . date('g:i A', strtotime($ranges[$idx]['start'])) . ' - ' . date('g:i A', strtotime($ranges[$idx]['end'])) . ']';
+                    }
+                    $message .= '- Cluster ' . ($idx + 1) . ': ' . $hour_count . ' hour(s), BDT ' . number_format($line_total, 2) . $time_text . "\n";
+                }
             }
         }
         if (!is_null($total_price)) {
@@ -1952,7 +2111,7 @@ class BookingTour {
         
         $type_category_sql = $this->get_type_category_sql();
         $joins = $this->get_type_joins_sql();
-        $sql = "SELECT b.*, t.name AS type_name, {$type_category_sql} AS type_category
+        $sql = "SELECT b.*, t.name AS type_name, {$type_category_sql} AS type_category, e.price_per_cluster AS event_cluster_price
                 FROM {$wpdb->prefix}bt_bookings b
                 {$joins}
                 WHERE $where ORDER BY b.created_at DESC LIMIT %d OFFSET %d";
@@ -2008,6 +2167,57 @@ class BookingTour {
         ));
     }
 
+    public function save_cluster_times() {
+        check_ajax_referer('bt_admin_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Unauthorized');
+        }
+
+        global $wpdb;
+        $booking_id = isset($_POST['booking_id']) ? intval($_POST['booking_id']) : 0;
+        $ranges_json = isset($_POST['cluster_time_ranges']) ? wp_unslash($_POST['cluster_time_ranges']) : '';
+        $booking = $wpdb->get_row($wpdb->prepare(
+            "SELECT id, ticket_count, booking_type_id FROM {$wpdb->prefix}bt_bookings WHERE id = %d",
+            $booking_id
+        ));
+        if (!$booking) {
+            wp_send_json_error('Booking not found');
+        }
+
+        $type = $this->get_type_by_id(intval($booking->booking_type_id));
+        if (!$type || $type->type_category !== 'event_tour') {
+            wp_send_json_error('Invalid booking type');
+        }
+
+        $ranges = json_decode($ranges_json, true);
+        if (!is_array($ranges)) {
+            wp_send_json_error('Invalid cluster time data');
+        }
+
+        $cluster_count = max(0, intval($booking->ticket_count));
+        if (count($ranges) !== $cluster_count) {
+            wp_send_json_error('Cluster count mismatch');
+        }
+
+        foreach ($ranges as $item) {
+            $start = isset($item['start']) ? sanitize_text_field($item['start']) : '';
+            $end = isset($item['end']) ? sanitize_text_field($item['end']) : '';
+            if (!preg_match('/^\d{2}:\d{2}(:\d{2})?$/', $start) || !preg_match('/^\d{2}:\d{2}(:\d{2})?$/', $end)) {
+                wp_send_json_error('Invalid time format');
+            }
+        }
+
+        $wpdb->update(
+            $wpdb->prefix . 'bt_bookings',
+            array('cluster_time_ranges' => wp_json_encode($ranges)),
+            array('id' => $booking_id),
+            array('%s'),
+            array('%d')
+        );
+
+        wp_send_json_success('Cluster times saved');
+    }
+
     public function update_booking_status() {
         check_ajax_referer('bt_admin_nonce', 'nonce');
         
@@ -2029,7 +2239,8 @@ class BookingTour {
                 "SELECT b.*, t.name AS type_name,
                         {$this->get_type_category_sql()} AS type_category,
                         COALESCE(i.tour_start_time, e.tour_start_time) AS tour_start_time,
-                        COALESCE(i.tour_end_time, e.tour_end_time) AS tour_end_time
+                        COALESCE(i.tour_end_time, e.tour_end_time) AS tour_end_time,
+                        e.price_per_cluster AS event_cluster_price
                  FROM {$wpdb->prefix}bt_bookings b
                  {$this->get_type_joins_sql()}
                  WHERE b.id = %d",
@@ -2052,7 +2263,10 @@ class BookingTour {
                         $booking->booking_date,
                         $booking->slot_ids,
                         $booking->ticket_count,
-                        $booking->total_price
+                        $booking->total_price,
+                        $booking->cluster_hours,
+                        $booking->cluster_time_ranges,
+                        $booking->event_cluster_price
                     );
                 } else {
                     $this->send_rejection_email(

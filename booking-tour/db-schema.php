@@ -71,6 +71,7 @@ function bt_create_schema() {
         max_clusters INT NOT NULL DEFAULT 0,
         members_per_cluster INT NOT NULL DEFAULT 1,
         price_per_cluster DECIMAL(10,2) NOT NULL DEFAULT 0,
+        max_hours_per_cluster INT NOT NULL DEFAULT 1,
         PRIMARY KEY (type_id)
     ) {$charset_collate};";
 
@@ -90,6 +91,8 @@ function bt_create_schema() {
         booking_type_id BIGINT UNSIGNED NOT NULL,
         booking_date DATE NOT NULL,
         slot_ids TEXT,
+        cluster_hours TEXT,
+        cluster_time_ranges TEXT,
         ticket_count INT NOT NULL DEFAULT 1,
         total_price DECIMAL(10,2) NOT NULL DEFAULT 0,
         customer_name VARCHAR(191) NOT NULL,

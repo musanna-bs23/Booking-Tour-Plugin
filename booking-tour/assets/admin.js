@@ -431,6 +431,48 @@ jQuery(document).ready(function($) {
         }
         if (booking.type_category === 'event_tour') {
             html += '<div class="bt-detail-row"><span>Clusters:</span><strong>' + booking.ticket_count + ' cluster(s)</strong></div>';
+            const hoursRaw = (booking.cluster_hours || '').toString().trim();
+            let clusterHours = [];
+            if (hoursRaw.length) {
+                clusterHours = hoursRaw.split(',').map(function(v) { return Math.max(1, parseInt(v, 10) || 1); });
+            }
+            const clusterCount = Math.max(0, parseInt(booking.ticket_count, 10) || 0);
+            if (!clusterHours.length && clusterCount > 0) {
+                clusterHours = Array(clusterCount).fill(1);
+            }
+            if (clusterHours.length > clusterCount) {
+                clusterHours = clusterHours.slice(0, clusterCount);
+            } else if (clusterHours.length < clusterCount) {
+                while (clusterHours.length < clusterCount) clusterHours.push(1);
+            }
+            let rate = parseFloat(booking.event_cluster_price || 0);
+            const hourSum = clusterHours.reduce(function(sum, h) { return sum + h; }, 0);
+            if (rate <= 0 && hourSum > 0) {
+                rate = parseFloat(booking.total_price || 0) / hourSum;
+            }
+            if (clusterHours.length) {
+                let ranges = [];
+                try { ranges = JSON.parse(booking.cluster_time_ranges || '[]'); } catch (e) { ranges = []; }
+                clusterHours.forEach(function(hours, idx) {
+                    const subtotal = rate * hours;
+                    let startVal = '';
+                    let endVal = '';
+                    if (Array.isArray(ranges) && ranges[idx]) {
+                        startVal = ranges[idx].start ? ranges[idx].start.substring(0, 5) : '';
+                        endVal = ranges[idx].end ? ranges[idx].end.substring(0, 5) : '';
+                    }
+                    html += '<div class="bt-detail-row"><span>Cluster ' + (idx + 1) + ':</span><strong>' + hours + ' hour(s) - BDT ' + subtotal.toFixed(2) + '</strong></div>';
+                    html += '<div class="bt-detail-row">';
+                    html += '<span>Time:</span>';
+                    html += '<strong>';
+                    html += '<input type="time" class="bt-cluster-time-start" data-index="' + idx + '" value="' + escapeHtml(startVal) + '"> ';
+                    html += 'to ';
+                    html += '<input type="time" class="bt-cluster-time-end" data-index="' + idx + '" value="' + escapeHtml(endVal) + '">';
+                    html += '</strong>';
+                    html += '</div>';
+                });
+                html += '<div class="bt-detail-row"><span></span><strong><button type="button" class="bt-btn bt-btn-approve bt-save-cluster-times" data-id="' + booking.id + '" data-clusters="' + clusterHours.length + '">Save Cluster Times</button></strong></div>';
+            }
         }
         if (booking.type_category === 'hall' && booking.addon_details && booking.addon_details.length) {
             html += '<div class="bt-detail-row"><span>Add-ons:</span><strong></strong></div>';
@@ -462,6 +504,56 @@ jQuery(document).ready(function($) {
 
     $(document).on('click', '.bt-modal-close, .bt-modal-overlay', function() {
         $('.bt-modal').fadeOut(200);
+    });
+
+    $(document).on('click', '.bt-save-cluster-times', function() {
+        const $btn = $(this);
+        const defaultLabel = $btn.data('default-label') || 'Save Cluster Time';
+        $btn.data('default-label', defaultLabel);
+        $btn.prop('disabled', true).text('Saving...');
+
+        const bookingId = parseInt($btn.data('id'), 10);
+        const clusterCount = parseInt($btn.data('clusters'), 10) || 0;
+        const ranges = [];
+        let valid = true;
+        for (let i = 0; i < clusterCount; i++) {
+            const start = $('.bt-cluster-time-start[data-index="' + i + '"]').val();
+            const end = $('.bt-cluster-time-end[data-index="' + i + '"]').val();
+            if (!start || !end) {
+                valid = false;
+                break;
+            }
+            ranges.push({
+                start: start + ':00',
+                end: end + ':00'
+            });
+        }
+        if (!valid) {
+            showMessage('Please set start and end time for each cluster.', 'error');
+            $btn.prop('disabled', false).text(defaultLabel);
+            return;
+        }
+
+        $.post(btAdmin.ajaxUrl, {
+            action: 'bt_save_cluster_times',
+            nonce: btAdmin.nonce,
+            booking_id: bookingId,
+            cluster_time_ranges: JSON.stringify(ranges)
+        }, function(response) {
+            if (response.success) {
+                const idx = bookingsData.findIndex(function(b) { return parseInt(b.id, 10) === bookingId; });
+                if (idx !== -1) {
+                    bookingsData[idx].cluster_time_ranges = JSON.stringify(ranges);
+                }
+                showMessage('Cluster times saved', 'success');
+            } else {
+                showMessage(response.data || 'Error saving cluster times', 'error');
+            }
+            $btn.prop('disabled', false).text(defaultLabel);
+        }).fail(function() {
+            showMessage('Error saving cluster times', 'error');
+            $btn.prop('disabled', false).text(defaultLabel);
+        });
     });
 
     $(document).on('click', '.bt-btn-approve, .bt-btn-reject', function() {

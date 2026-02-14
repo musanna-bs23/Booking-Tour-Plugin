@@ -885,6 +885,48 @@
     cursor: pointer;
 }
 
+.bt-hour-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 100000;
+}
+
+.bt-hour-modal-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+}
+
+.bt-hour-modal-content {
+    position: relative;
+    width: min(420px, calc(100vw - 32px));
+    margin: 10vh auto 0;
+    background: #fff;
+    border-radius: 14px;
+    border: 1px solid var(--bt-border);
+    padding: 22px 20px 18px;
+    box-shadow: 0 20px 60px rgba(17, 24, 39, 0.18);
+}
+
+.bt-hour-modal-title {
+    margin: 0 0 14px;
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--bt-text);
+}
+
+.bt-hour-modal-hint {
+    margin: 12px 0 0;
+    font-size: 13px;
+    color: var(--bt-text-muted);
+}
+
+.bt-hour-modal-actions {
+    margin-top: 16px;
+    display: flex;
+    justify-content: flex-end;
+}
+
 /* Form Section */
 .bt-form-section {
     border: 1px solid var(--bt-border);
