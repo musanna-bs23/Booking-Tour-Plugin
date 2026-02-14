@@ -1870,75 +1870,23 @@ class BookingTour {
         wp_mail($admin_email, $subject, $message, $headers);
     }
 
-    private function send_confirmation_email($customer_email, $customer_name, $type, $date, $slot_ids = '', $ticket_count = 1, $total_price = null, $cluster_hours_csv = '', $cluster_time_ranges_json = '', $event_cluster_rate = null) {
+    private function send_confirmation_email($customer_email, $customer_name, $type, $date, $slot_ids = '', $ticket_count = 1, $total_price = null, $cluster_hours_csv = '', $cluster_time_ranges_json = '', $event_cluster_rate = null, $booking_id = 0, $customer_phone = '', $notes = '') {
         global $wpdb;
         
         $subject = 'Booking Confirmed - ' . $type->type_name;
         
         $message = "Dear $customer_name,\n\n";
         $message .= "Great news! Your booking has been confirmed.\n\n";
-        $message .= "Booking Details:\n";
-        $message .= "Booking Type: {$type->type_name}\n";
-        $message .= "Date: " . date('F j, Y', strtotime($date)) . "\n";
-        
-        if (($type->type_category === 'hall' || $type->type_category === 'staircase') && $slot_ids) {
-            $slot_id_arr = array_map('intval', explode(',', $slot_ids));
-            $slots = $wpdb->get_results(
-                "SELECT slot_name, start_time, end_time FROM {$wpdb->prefix}bt_slots WHERE id IN (" . implode(',', $slot_id_arr) . ")"
-            );
-            $message .= "Time Slots:\n";
-            foreach ($slots as $slot) {
-                $message .= sprintf(
-                    "- %s (%s - %s)\n",
-                    $slot->slot_name,
-                    date('g:i A', strtotime($slot->start_time)),
-                    date('g:i A', strtotime($slot->end_time))
-                );
-            }
-        } else {
-            $message .= "Tour Time: " . date('g:i A', strtotime($type->tour_start_time)) . " - " . date('g:i A', strtotime($type->tour_end_time)) . "\n";
-            if ($type->type_category === 'individual_tour') {
-                $message .= "Number of Tickets: $ticket_count\n";
-            } elseif ($type->type_category === 'event_tour') {
-                $message .= "Clusters: " . intval($ticket_count) . "\n";
-                $hours = array();
-                if (!empty($cluster_hours_csv)) {
-                    $hours = array_map('intval', explode(',', $cluster_hours_csv));
-                }
-                $hours = array_values(array_filter($hours, function($v) {
-                    return intval($v) > 0;
-                }));
-                if (count($hours) < intval($ticket_count)) {
-                    $hours = array_pad($hours, intval($ticket_count), 1);
-                } elseif (count($hours) > intval($ticket_count)) {
-                    $hours = array_slice($hours, 0, intval($ticket_count));
-                }
-
-                $ranges = json_decode($cluster_time_ranges_json, true);
-                if (!is_array($ranges)) {
-                    $ranges = array();
-                }
-                $rate = is_null($event_cluster_rate) ? 0 : floatval($event_cluster_rate);
-                if ($rate <= 0) {
-                    $sum_hours = array_sum($hours);
-                    if ($sum_hours > 0 && !is_null($total_price)) {
-                        $rate = floatval($total_price) / $sum_hours;
-                    }
-                }
-
-                $message .= "Cluster Breakdown:\n";
-                foreach ($hours as $idx => $hour_count) {
-                    $line_total = $rate * $hour_count;
-                    $time_text = '';
-                    if (isset($ranges[$idx]) && is_array($ranges[$idx]) && !empty($ranges[$idx]['start']) && !empty($ranges[$idx]['end'])) {
-                        $time_text = ' [' . date('g:i A', strtotime($ranges[$idx]['start'])) . ' - ' . date('g:i A', strtotime($ranges[$idx]['end'])) . ']';
-                    }
-                    $message .= '- Cluster ' . ($idx + 1) . ': ' . $hour_count . ' hour(s), BDT ' . number_format($line_total, 2) . $time_text . "\n";
-                }
-            }
+        $message .= "Customer Details:\n";
+        $message .= "Name: {$customer_name}\n";
+        $message .= "Email: {$customer_email}\n";
+        if (!empty($customer_phone)) {
+            $message .= "Phone: {$customer_phone}\n";
         }
-        if (!is_null($total_price)) {
-            $message .= "Total Amount: BDT " . number_format($total_price, 2) . "\n";
+        $message .= "\n";
+        $message .= $this->build_booking_breakdown_text($type, $date, $slot_ids, $ticket_count, $total_price, $booking_id, $cluster_hours_csv, $cluster_time_ranges_json, $event_cluster_rate);
+        if (!empty($notes)) {
+            $message .= "Notes: " . $notes . "\n";
         }
         
         $message .= "\nWe look forward to seeing you!\n\n";
@@ -1952,39 +1900,23 @@ class BookingTour {
         wp_mail($customer_email, $subject, $message, $headers);
     }
 
-    private function send_rejection_email($customer_email, $customer_name, $type, $date, $slot_ids = '', $ticket_count = 1, $total_price = null) {
+    private function send_rejection_email($customer_email, $customer_name, $type, $date, $slot_ids = '', $ticket_count = 1, $total_price = null, $cluster_hours_csv = '', $cluster_time_ranges_json = '', $event_cluster_rate = null, $booking_id = 0, $customer_phone = '', $notes = '') {
         global $wpdb;
         
         $subject = 'Booking Rejected - ' . $type->type_name;
         
         $message = "Dear $customer_name,\n\n";
         $message .= "We’re sorry to inform you that your booking has been rejected.\n\n";
-        $message .= "Booking Details:\n";
-        $message .= "Booking Type: {$type->type_name}\n";
-        $message .= "Date: " . date('F j, Y', strtotime($date)) . "\n";
-        
-        if (($type->type_category === 'hall' || $type->type_category === 'staircase') && $slot_ids) {
-            $slot_id_arr = array_map('intval', explode(',', $slot_ids));
-            $slots = $wpdb->get_results(
-                "SELECT slot_name, start_time, end_time FROM {$wpdb->prefix}bt_slots WHERE id IN (" . implode(',', $slot_id_arr) . ")"
-            );
-            $message .= "Time Slots:\n";
-            foreach ($slots as $slot) {
-                $message .= sprintf(
-                    "- %s (%s - %s)\n",
-                    $slot->slot_name,
-                    date('g:i A', strtotime($slot->start_time)),
-                    date('g:i A', strtotime($slot->end_time))
-                );
-            }
-        } else {
-            $message .= "Tour Time: " . date('g:i A', strtotime($type->tour_start_time)) . " - " . date('g:i A', strtotime($type->tour_end_time)) . "\n";
-            if ($type->type_category === 'individual_tour') {
-                $message .= "Number of Tickets: $ticket_count\n";
-            }
+        $message .= "Customer Details:\n";
+        $message .= "Name: {$customer_name}\n";
+        $message .= "Email: {$customer_email}\n";
+        if (!empty($customer_phone)) {
+            $message .= "Phone: {$customer_phone}\n";
         }
-        if (!is_null($total_price)) {
-            $message .= "Total Amount: BDT " . number_format($total_price, 2) . "\n";
+        $message .= "\n";
+        $message .= $this->build_booking_breakdown_text($type, $date, $slot_ids, $ticket_count, $total_price, $booking_id, $cluster_hours_csv, $cluster_time_ranges_json, $event_cluster_rate);
+        if (!empty($notes)) {
+            $message .= "Notes: " . $notes . "\n";
         }
         
         $message .= "\nIf you have any questions, please contact us.\n\n";
@@ -1996,6 +1928,90 @@ class BookingTour {
         );
         
         wp_mail($customer_email, $subject, $message, $headers);
+    }
+
+    private function build_booking_breakdown_text($type, $date, $slot_ids, $ticket_count, $total_price, $booking_id = 0, $cluster_hours_csv = '', $cluster_time_ranges_json = '', $event_cluster_rate = null) {
+        global $wpdb;
+        $message = "Booking Details:\n";
+        $message .= "Booking Type: {$type->type_name}\n";
+        $message .= "Date: " . date('F j, Y', strtotime($date)) . "\n";
+
+        if (($type->type_category === 'hall' || $type->type_category === 'staircase') && $slot_ids) {
+            $slot_id_arr = array_map('intval', explode(',', $slot_ids));
+            $slot_rows = array();
+            if (!empty($slot_id_arr)) {
+                $slot_rows = $wpdb->get_results(
+                    "SELECT slot_name, start_time, end_time, price FROM {$wpdb->prefix}bt_slots WHERE id IN (" . implode(',', $slot_id_arr) . ")"
+                );
+            }
+            $slot_total = 0;
+            $message .= "Slots:\n";
+            foreach ($slot_rows as $slot) {
+                $slot_total += floatval($slot->price);
+                $message .= "- {$slot->slot_name} (" . date('g:i A', strtotime($slot->start_time)) . " - " . date('g:i A', strtotime($slot->end_time)) . ")\n";
+            }
+            $message .= "Slots Total: BDT " . number_format($slot_total, 2) . "\n";
+
+            if ($type->type_category === 'hall' && intval($booking_id) > 0) {
+                $addon_rows = $wpdb->get_results($wpdb->prepare(
+                    "SELECT addon_name, addon_price, quantity FROM {$wpdb->prefix}bt_booking_addons WHERE booking_id = %d",
+                    $booking_id
+                ));
+                if (!empty($addon_rows)) {
+                    $addons_subtotal = 0;
+                    $message .= "Add-ons:\n";
+                    foreach ($addon_rows as $addon) {
+                        $line_total = floatval($addon->addon_price) * intval($addon->quantity);
+                        $addons_subtotal += $line_total;
+                        $message .= "- {$addon->addon_name} × {$addon->quantity}: BDT " . number_format($line_total, 2) . " (BDT " . number_format($addon->addon_price, 2) . ")\n";
+                    }
+                    $message .= "Add-ons Subtotal: BDT " . number_format($addons_subtotal, 2) . "\n";
+                }
+            }
+        } else {
+            $message .= "Tour Time: " . date('g:i A', strtotime($type->tour_start_time)) . " - " . date('g:i A', strtotime($type->tour_end_time)) . "\n";
+            if ($type->type_category === 'individual_tour') {
+                $message .= "Tickets: " . intval($ticket_count) . " person(s)\n";
+            } elseif ($type->type_category === 'event_tour') {
+                $message .= "Clusters: " . intval($ticket_count) . " cluster(s)\n";
+                $hours = array();
+                if (!empty($cluster_hours_csv)) {
+                    $hours = array_map('intval', explode(',', $cluster_hours_csv));
+                }
+                $hours = array_values(array_filter($hours, function($v) {
+                    return intval($v) > 0;
+                }));
+                if (count($hours) < intval($ticket_count)) {
+                    $hours = array_pad($hours, intval($ticket_count), 1);
+                } elseif (count($hours) > intval($ticket_count)) {
+                    $hours = array_slice($hours, 0, intval($ticket_count));
+                }
+                $ranges = json_decode($cluster_time_ranges_json, true);
+                if (!is_array($ranges)) {
+                    $ranges = array();
+                }
+                $rate = is_null($event_cluster_rate) ? 0 : floatval($event_cluster_rate);
+                if ($rate <= 0) {
+                    $sum_hours = array_sum($hours);
+                    if ($sum_hours > 0 && !is_null($total_price)) {
+                        $rate = floatval($total_price) / $sum_hours;
+                    }
+                }
+                foreach ($hours as $idx => $hour_count) {
+                    $line_total = $rate * $hour_count;
+                    $time_text = '';
+                    if (isset($ranges[$idx]) && is_array($ranges[$idx]) && !empty($ranges[$idx]['start']) && !empty($ranges[$idx]['end'])) {
+                        $time_text = ' [' . date('g:i A', strtotime($ranges[$idx]['start'])) . ' - ' . date('g:i A', strtotime($ranges[$idx]['end'])) . ']';
+                    }
+                    $message .= "Cluster " . ($idx + 1) . ": {$hour_count} hour(s), BDT " . number_format($line_total, 2) . $time_text . "\n";
+                }
+            }
+        }
+
+        if (!is_null($total_price)) {
+            $message .= "Total Amount: BDT " . number_format($total_price, 2) . "\n";
+        }
+        return $message;
     }
 
     private function save_booking_addons($booking_id, $type_id, $booking_date, $addons_payload) {
@@ -2266,7 +2282,10 @@ class BookingTour {
                         $booking->total_price,
                         $booking->cluster_hours,
                         $booking->cluster_time_ranges,
-                        $booking->event_cluster_price
+                        $booking->event_cluster_price,
+                        $booking->id,
+                        $booking->customer_phone,
+                        $booking->notes
                     );
                 } else {
                     $this->send_rejection_email(
@@ -2276,7 +2295,13 @@ class BookingTour {
                         $booking->booking_date,
                         $booking->slot_ids,
                         $booking->ticket_count,
-                        $booking->total_price
+                        $booking->total_price,
+                        $booking->cluster_hours,
+                        $booking->cluster_time_ranges,
+                        $booking->event_cluster_price,
+                        $booking->id,
+                        $booking->customer_phone,
+                        $booking->notes
                     );
                 }
             }
@@ -2439,8 +2464,8 @@ class BookingTour {
 
         $type_category_sql = $this->get_type_category_sql();
         $joins = $this->get_type_joins_sql();
-        $sql = "SELECT b.id, b.booking_type_id, b.booking_date, b.slot_ids, b.ticket_count, b.total_price,
-                       b.customer_name, b.customer_email, b.customer_phone, b.status,
+        $sql = "SELECT b.id, b.booking_type_id, b.booking_date, b.slot_ids, b.cluster_hours, b.cluster_time_ranges, b.ticket_count, b.total_price,
+                       b.customer_name, b.customer_email, b.customer_phone, b.notes, b.status,
                        t.name AS type_name, {$type_category_sql} AS type_category,
                        i.ticket_price, e.price_per_cluster AS event_cluster_price
                 FROM {$wpdb->prefix}bt_bookings b
@@ -2554,14 +2579,35 @@ class BookingTour {
                     }
                 }
                 $html .= '<tr><td>Slot(s)</td><td>' . esc_html(implode(', ', $slot_names)) . '</td></tr>';
-                $html .= '<tr><td>Base Price</td><td>BDT ' . number_format($slot_total, 2) . '</td></tr>';
+                $html .= '<tr><td>Slots Total</td><td>BDT ' . number_format($slot_total, 2) . '</td></tr>';
             } elseif ($booking->type_category === 'event_tour') {
                 $cluster_price = floatval($booking->event_cluster_price);
-                $base = $cluster_price * intval($booking->ticket_count);
-                $html .= '<tr><td>Base Price</td><td>BDT ' . number_format($base, 2) . '</td></tr>';
+                $cluster_hours = array();
+                if (!empty($booking->cluster_hours)) {
+                    $cluster_hours = array_map('intval', explode(',', $booking->cluster_hours));
+                }
+                $cluster_hours = array_values(array_filter($cluster_hours, function($v) {
+                    return intval($v) > 0;
+                }));
+                if (count($cluster_hours) < intval($booking->ticket_count)) {
+                    $cluster_hours = array_pad($cluster_hours, intval($booking->ticket_count), 1);
+                } elseif (count($cluster_hours) > intval($booking->ticket_count)) {
+                    $cluster_hours = array_slice($cluster_hours, 0, intval($booking->ticket_count));
+                }
+                $ranges = json_decode($booking->cluster_time_ranges, true);
+                if (!is_array($ranges)) {
+                    $ranges = array();
+                }
+                foreach ($cluster_hours as $idx => $hours) {
+                    $line_total = $cluster_price * $hours;
+                    $time_text = '';
+                    if (isset($ranges[$idx]) && is_array($ranges[$idx]) && !empty($ranges[$idx]['start']) && !empty($ranges[$idx]['end'])) {
+                        $time_text = ' [' . date('g:i A', strtotime($ranges[$idx]['start'])) . ' - ' . date('g:i A', strtotime($ranges[$idx]['end'])) . ']';
+                    }
+                    $html .= '<tr><td>Cluster ' . ($idx + 1) . '</td><td>' . intval($hours) . ' hour(s), BDT ' . number_format($line_total, 2) . esc_html($time_text) . '</td></tr>';
+                }
             } elseif ($booking->type_category === 'individual_tour') {
-                $base = floatval($booking->ticket_price) * intval($booking->ticket_count);
-                $html .= '<tr><td>Base Price</td><td>BDT ' . number_format($base, 2) . '</td></tr>';
+                $html .= '<tr><td>Total</td><td>BDT ' . number_format($booking->total_price, 2) . '</td></tr>';
             }
 
             $addons_subtotal = 0;
@@ -2575,9 +2621,12 @@ class BookingTour {
                         ' = BDT ' . number_format($line, 2) . '<br>';
                 }
                 $html .= '<tr><td>Add-ons</td><td>' . $addon_lines . '</td></tr>';
+                $html .= '<tr><td>Add-ons Subtotal</td><td>BDT ' . number_format($addons_subtotal, 2) . '</td></tr>';
             }
-            $html .= '<tr><td>Add-ons Subtotal</td><td>BDT ' . number_format($addons_subtotal, 2) . '</td></tr>';
             $html .= '<tr><td>Final Total</td><td>BDT ' . number_format($booking->total_price, 2) . '</td></tr>';
+            if (!empty($booking->notes)) {
+                $html .= '<tr><td>Notes</td><td>' . esc_html($booking->notes) . '</td></tr>';
+            }
             $html .= '<tr><td>Status</td><td>' . esc_html(ucfirst($booking->status)) . '</td></tr>';
             $html .= '</table>';
         }
