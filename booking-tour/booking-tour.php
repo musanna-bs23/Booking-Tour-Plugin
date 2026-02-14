@@ -1947,8 +1947,13 @@ class BookingTour {
             $slot_total = 0;
             $message .= "Slots:\n";
             foreach ($slot_rows as $slot) {
-                $slot_total += floatval($slot->price);
-                $message .= "- {$slot->slot_name} (" . date('g:i A', strtotime($slot->start_time)) . " - " . date('g:i A', strtotime($slot->end_time)) . ")\n";
+                $line_total = floatval($slot->price);
+                $slot_total += $line_total;
+                $time_text = '';
+                if (!empty($slot->start_time) && !empty($slot->end_time)) {
+                    $time_text = ' (' . date('g:i A', strtotime($slot->start_time)) . ' - ' . date('g:i A', strtotime($slot->end_time)) . ')';
+                }
+                $message .= "- {$slot->slot_name}{$time_text}: BDT " . number_format($line_total, 2) . "\n";
             }
             $message .= "Slots Total: BDT " . number_format($slot_total, 2) . "\n";
 
@@ -2569,16 +2574,21 @@ class BookingTour {
                 $html .= '<tr><td>Clusters</td><td>' . intval($booking->ticket_count) . '</td></tr>';
             }
             if (!empty($booking->slot_ids)) {
-                $slot_names = array();
+                $slot_index = 1;
                 $slot_total = 0;
                 foreach (array_map('intval', explode(',', $booking->slot_ids)) as $sid) {
                     if (isset($slot_map[$sid])) {
                         $slot = $slot_map[$sid];
-                        $slot_names[] = $slot->slot_name . ' (' . date('g:i A', strtotime($slot->start_time)) . ' - ' . date('g:i A', strtotime($slot->end_time)) . ')';
-                        $slot_total += floatval($slot->price);
+                        $line_total = floatval($slot->price);
+                        $slot_total += $line_total;
+                        $time_text = '';
+                        if (!empty($slot->start_time) && !empty($slot->end_time)) {
+                            $time_text = ' (' . date('g:i A', strtotime($slot->start_time)) . ' - ' . date('g:i A', strtotime($slot->end_time)) . ')';
+                        }
+                        $html .= '<tr><td>Slot ' . $slot_index . '</td><td>' . esc_html($slot->slot_name . $time_text) . ' - BDT ' . number_format($line_total, 2) . '</td></tr>';
+                        $slot_index++;
                     }
                 }
-                $html .= '<tr><td>Slot(s)</td><td>' . esc_html(implode(', ', $slot_names)) . '</td></tr>';
                 $html .= '<tr><td>Slots Total</td><td>BDT ' . number_format($slot_total, 2) . '</td></tr>';
             } elseif ($booking->type_category === 'event_tour') {
                 $cluster_price = floatval($booking->event_cluster_price);

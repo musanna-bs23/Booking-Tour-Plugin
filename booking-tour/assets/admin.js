@@ -418,10 +418,13 @@ jQuery(document).ready(function($) {
         html += '<div class="bt-detail-row"><span>Type:</span><strong>' + escapeHtml(booking.type_name || 'N/A') + '</strong></div>';
         html += '<div class="bt-detail-row"><span>Date:</span><strong>' + formatDateLong(booking.booking_date) + '</strong></div>';
         if ((booking.type_category === 'hall' || booking.type_category === 'staircase') && booking.slot_details && booking.slot_details.length) {
-            const slotLines = booking.slot_details.map(function(slot) {
-                return escapeHtml(slot.slot_name) + ' (' + formatTime(slot.start_time) + ' - ' + formatTime(slot.end_time) + ')';
+            html += '<div class="bt-detail-row"><span>Slots:</span><strong></strong></div>';
+            booking.slot_details.forEach(function(slot) {
+                const start = slot.start_time ? formatTime(slot.start_time) : '';
+                const end = slot.end_time ? formatTime(slot.end_time) : '';
+                const timeText = (start && end) ? (' (' + start + ' - ' + end + ')') : '';
+                html += '<div class="bt-detail-row"><span>' + escapeHtml(slot.slot_name) + timeText + '</span><strong>BDT ' + parseFloat(slot.price || 0).toFixed(2) + '</strong></div>';
             });
-            html += '<div class="bt-detail-row"><span>Slots:</span><strong>' + slotLines.join(', ') + '</strong></div>';
             if (typeof booking.slot_total !== 'undefined') {
                 html += '<div class="bt-detail-row"><span>Slots Total:</span><strong>BDT ' + parseFloat(booking.slot_total).toFixed(2) + '</strong></div>';
             }
