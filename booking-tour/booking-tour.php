@@ -2701,7 +2701,8 @@ class BookingTour {
                         </svg>
                         <span>Multipurpose Hall</span>
                     </button>
-                    <div class="bt-tour-description">This is Multipurpose Hall booking.</div>
+                    <div class="bt-tour-description">Organise events, dialogues, workshops, and collaborative programmes in the multipurpose hall, designed to accommodate up to 80 participants. Facilities such as sound systems, projectors, microphones, Wi-Fi, and seating arrangements are available as add-ons.
+                    </div>
                 </div>
                 <?php endif; ?>
                 <?php if (intval($staircase_type->is_hidden) !== 1): ?>
@@ -2713,7 +2714,7 @@ class BookingTour {
                         </svg>
                         <span>Screening Zone</span>
                     </button>
-                    <div class="bt-tour-description">This is Staircase booking.</div>
+                    <div class="bt-tour-description">Ideal for intimate screenings or presentations in the staircase gallery adjacent to the library area. With a laser projector and surround sound system, the space offers an immersive setting ideal for focused viewing and thoughtful gatherings.</div>
                 </div>
                 <?php endif; ?>
                 <?php if (intval($individual_type->is_hidden) !== 1): ?>
@@ -2725,7 +2726,7 @@ class BookingTour {
                         </svg>
                         <span>Individual Tour</span>
                     </button>
-                    <div class="bt-tour-description">This is Individual Tour booking.</div>
+                    <div class="bt-tour-description">Experience the exhibitions at your own pace through a self-guided visit. Secure your ticket and enjoy the freedom to discover the Knowledge Hub - exploring each space as long or as briefly as you like.</div>
                 </div>
                 <?php endif; ?>
                 <?php if (intval($event_type->is_hidden) !== 1): ?>
@@ -2739,7 +2740,7 @@ class BookingTour {
                         </svg>
                         <span>Guided Tour</span>
                     </button>
-                    <div class="bt-tour-description">This is Event/Guide Tour booking.</div>
+                    <div class="bt-tour-description">Journey through the exhibitions with a Knowledge Hub guide, offering insight, context, and deeper stories behind the works. Each guide leads up to five visitors, with additional guides arranged for larger groups.</div>
                 </div>
                 <?php endif; ?>
             </div>
