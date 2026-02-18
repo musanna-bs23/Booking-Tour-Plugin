@@ -2687,7 +2687,7 @@ class BookingTour {
                         <polyline points="9 22 9 12 15 12 15 22"></polyline>
                     </svg>
                 </div>
-                <h2 class="bt-title">Book Your Visit</h2>
+                <h2 class="bt-title">Explore Your Options</h2>
                 <p class="bt-subtitle">Choose a booking type, select a date, and complete your request</p>
             </div>
 
@@ -2707,7 +2707,7 @@ class BookingTour {
                         <path d="M3 21h4v-4h4v-4h4v-4h6"></path>
                         <path d="M3 7h4v4H3z"></path>
                     </svg>
-                    <span>Staircase Book</span>
+                    <span>Screening Zone</span>
                 </button>
                 <?php endif; ?>
                 <?php if (intval($individual_type->is_hidden) !== 1): ?>
@@ -2716,7 +2716,7 @@ class BookingTour {
                         <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
                         <circle cx="12" cy="7" r="4"></circle>
                     </svg>
-                    <span>Individual Booking</span>
+                    <span>Individual Tour</span>
                 </button>
                 <?php endif; ?>
                 <?php if (intval($event_type->is_hidden) !== 1): ?>
@@ -2727,7 +2727,7 @@ class BookingTour {
                         <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
                         <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
                     </svg>
-                    <span>Event Booking</span>
+                    <span>Guided Tour</span>
                 </button>
                 <?php endif; ?>
             </div>
