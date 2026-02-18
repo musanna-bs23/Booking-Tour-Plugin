@@ -2693,42 +2693,54 @@ class BookingTour {
 
             <div class="bt-tour-selector bt-tour-selector-merged">
                 <?php if (intval($hall_type->is_hidden) !== 1): ?>
-                <button class="bt-tour-btn <?php echo $default_type->id === $hall_type->id ? 'active' : ''; ?>" data-type-id="<?php echo esc_attr($hall_type->id); ?>" data-category="hall">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
-                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
-                        <polyline points="9 22 9 12 15 12 15 22"></polyline>
-                    </svg>
-                    <span>Multipurpose Hall</span>
-                </button>
+                <div class="bt-tour-item">
+                    <button class="bt-tour-btn <?php echo $default_type->id === $hall_type->id ? 'active' : ''; ?>" data-type-id="<?php echo esc_attr($hall_type->id); ?>" data-category="hall">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                            <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                        </svg>
+                        <span>Multipurpose Hall</span>
+                    </button>
+                    <div class="bt-tour-description">This is Multipurpose Hall booking.</div>
+                </div>
                 <?php endif; ?>
                 <?php if (intval($staircase_type->is_hidden) !== 1): ?>
-                <button class="bt-tour-btn <?php echo $default_type->id === $staircase_type->id ? 'active' : ''; ?>" data-type-id="<?php echo esc_attr($staircase_type->id); ?>" data-category="staircase">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
-                        <path d="M3 21h4v-4h4v-4h4v-4h6"></path>
-                        <path d="M3 7h4v4H3z"></path>
-                    </svg>
-                    <span>Screening Zone</span>
-                </button>
+                <div class="bt-tour-item">
+                    <button class="bt-tour-btn <?php echo $default_type->id === $staircase_type->id ? 'active' : ''; ?>" data-type-id="<?php echo esc_attr($staircase_type->id); ?>" data-category="staircase">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                            <path d="M3 21h4v-4h4v-4h4v-4h6"></path>
+                            <path d="M3 7h4v4H3z"></path>
+                        </svg>
+                        <span>Screening Zone</span>
+                    </button>
+                    <div class="bt-tour-description">This is Staircase booking.</div>
+                </div>
                 <?php endif; ?>
                 <?php if (intval($individual_type->is_hidden) !== 1): ?>
-                <button class="bt-tour-btn <?php echo $default_type->id === $individual_type->id ? 'active' : ''; ?>" data-type-id="<?php echo esc_attr($individual_type->id); ?>" data-category="individual_tour">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
-                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                        <circle cx="12" cy="7" r="4"></circle>
-                    </svg>
-                    <span>Individual Tour</span>
-                </button>
+                <div class="bt-tour-item">
+                    <button class="bt-tour-btn <?php echo $default_type->id === $individual_type->id ? 'active' : ''; ?>" data-type-id="<?php echo esc_attr($individual_type->id); ?>" data-category="individual_tour">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                            <circle cx="12" cy="7" r="4"></circle>
+                        </svg>
+                        <span>Individual Tour</span>
+                    </button>
+                    <div class="bt-tour-description">This is Individual Tour booking.</div>
+                </div>
                 <?php endif; ?>
                 <?php if (intval($event_type->is_hidden) !== 1): ?>
-                <button class="bt-tour-btn <?php echo $default_type->id === $event_type->id ? 'active' : ''; ?>" data-type-id="<?php echo esc_attr($event_type->id); ?>" data-category="event_tour">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
-                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                        <circle cx="9" cy="7" r="4"></circle>
-                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-                        <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-                    </svg>
-                    <span>Guided Tour</span>
-                </button>
+                <div class="bt-tour-item">
+                    <button class="bt-tour-btn <?php echo $default_type->id === $event_type->id ? 'active' : ''; ?>" data-type-id="<?php echo esc_attr($event_type->id); ?>" data-category="event_tour">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                            <circle cx="9" cy="7" r="4"></circle>
+                            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                        </svg>
+                        <span>Guided Tour</span>
+                    </button>
+                    <div class="bt-tour-description">This is Event/Guide Tour booking.</div>
+                </div>
                 <?php endif; ?>
             </div>
 

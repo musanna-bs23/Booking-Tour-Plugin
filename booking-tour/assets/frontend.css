@@ -77,8 +77,23 @@
     flex-wrap: wrap;
 }
 
+.bt-tour-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+}
+
 .bt-tour-selector-merged .bt-tour-btn {
     padding: 16px 24px;
+}
+
+.bt-tour-description {
+    max-width: 220px;
+    text-align: center;
+    font-size: 13px;
+    line-height: 1.4;
+    color: var(--bt-text-muted);
 }
 
 .bt-tour-btn {
