@@ -564,8 +564,18 @@
 }
 
 .bt-slot-card.bt-slot-selected {
-    border-color: var(--bt-brand);
-    background: rgba(138, 69, 39, 0.04);
+    border-color: #8A4527;
+    background: #8A4527;
+}
+
+.bt-slot-card.bt-slot-selected:hover:not(.bt-slot-disabled) {
+    border-color: #A85A38;
+}
+
+.bt-slot-card.bt-slot-selected .bt-slot-name,
+.bt-slot-card.bt-slot-selected .bt-slot-time,
+.bt-slot-card.bt-slot-selected .bt-slot-status {
+    color: #FFFFFF;
 }
 
 .bt-slot-card.bt-slot-disabled {

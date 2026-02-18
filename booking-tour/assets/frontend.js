@@ -281,9 +281,6 @@ jQuery(document).ready(function($) {
                             bookedSlots[dateStr] = newBooked;
                             selectedSlots = selectedSlots.filter(id => !newBooked.includes(id));
                             hasChanges = true;
-                            if (selectedSlots.length < newBooked.length) {
-                                showToast('Some slots were just booked', 'error');
-                            }
                         }
                     }
                     const newFullyBooked = response.data.fullyBookedDates || [];
@@ -801,11 +798,11 @@ jQuery(document).ready(function($) {
             $('#bt-selected-date').val(formatDate(selectedDate));
             $('#bt-selected-slots').val(selectedSlots.join(','));
             $('#bt-selected-addons').val(JSON.stringify(selectedAddons));
-            $('#bt-summary').slideDown(300);
-            $('#bt-form-section').slideDown(300);
+            $('#bt-summary').stop(true, true).slideDown(300);
+            $('#bt-form-section').stop(true, true).slideDown(300);
         } else {
-            $('#bt-summary').slideUp(200);
-            $('#bt-form-section').slideUp(200);
+            $('#bt-summary').stop(true, true).slideUp(200);
+            $('#bt-form-section').stop(true, true).slideUp(200);
         }
 
         toggleAddonsSection();
@@ -833,7 +830,9 @@ jQuery(document).ready(function($) {
         $('#bt-selected-slots').val('');
         $('#bt-selected-addons').val('{}');
         $('#bt-addons-list').empty();
-        $('#bt-addons-section').hide();
+        $('#bt-addons-section').stop(true, true).hide();
+        $('#bt-summary').stop(true, true).hide();
+        $('#bt-form-section').stop(true, true).hide();
     }
 
     function toggleSections() {
@@ -841,13 +840,22 @@ jQuery(document).ready(function($) {
         const showHall = isHallCategory(category);
         $('.bt-slots-section').toggle(showHall);
         $('.bt-tour-info-section').toggle(!showHall);
+        if (showHall && (!selectedDate || selectedSlots.length === 0)) {
+            $('#bt-addons-section').stop(true, true).hide();
+            $('#bt-summary').stop(true, true).hide();
+            $('#bt-form-section').stop(true, true).hide();
+        }
     }
 
     function toggleAddonsSection() {
         const category = $('#bt-type-category').val();
-        const showAddons = category === 'hall' && selectedDate && selectedSlots.length > 0 && addons.length > 0;
-        $('#bt-addons-section').toggle(showAddons);
-        if (showAddons) renderAddonsPanel();
+        const showAddons = category === 'hall' && !!selectedDate && selectedSlots.length > 0 && addons.length > 0;
+        if (!showAddons) {
+            $('#bt-addons-section').stop(true, true).hide();
+            return;
+        }
+        renderAddonsPanel();
+        $('#bt-addons-section').stop(true, true).show();
     }
 
     function calculateAddonsTotal() {
