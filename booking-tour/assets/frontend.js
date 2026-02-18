@@ -37,11 +37,13 @@ jQuery(document).ready(function($) {
     if (initialTypeId) loadTypeData(initialTypeId);
     toggleSections();
     ensureClusterHourModal();
+    updateActiveTourDescription();
 
     // Tour type selection
     $('.bt-tour-btn').on('click', function() {
         $('.bt-tour-btn').removeClass('active');
         $(this).addClass('active');
+        updateActiveTourDescription();
         
         const typeId = $(this).data('type-id');
         const category = $(this).data('category');
@@ -53,6 +55,11 @@ jQuery(document).ready(function($) {
         updateUI();
         loadTypeData(typeId);
     });
+
+    function updateActiveTourDescription() {
+        const description = $('.bt-tour-btn.active').attr('data-description') || '';
+        $('#bt-tour-active-description').text(description);
+    }
 
     // Add-ons controls
     $('#bt-addons-list').on('click', '.bt-addon-plus', function() {

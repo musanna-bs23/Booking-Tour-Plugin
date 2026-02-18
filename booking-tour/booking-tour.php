@@ -2694,44 +2694,40 @@ class BookingTour {
             <div class="bt-tour-selector bt-tour-selector-merged">
                 <?php if (intval($hall_type->is_hidden) !== 1): ?>
                 <div class="bt-tour-item">
-                    <button class="bt-tour-btn <?php echo $default_type->id === $hall_type->id ? 'active' : ''; ?>" data-type-id="<?php echo esc_attr($hall_type->id); ?>" data-category="hall">
+                    <button class="bt-tour-btn <?php echo $default_type->id === $hall_type->id ? 'active' : ''; ?>" data-type-id="<?php echo esc_attr($hall_type->id); ?>" data-category="hall" data-description="<?php echo esc_attr('Organise events, dialogues, workshops, and collaborative programmes in the multipurpose hall, designed to accommodate up to 80 participants. Facilities such as sound systems, projectors, microphones, Wi-Fi, and seating arrangements are available as add-ons.'); ?>">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
                             <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
                             <polyline points="9 22 9 12 15 12 15 22"></polyline>
                         </svg>
                         <span>Multipurpose Hall</span>
                     </button>
-                    <div class="bt-tour-description">Organise events, dialogues, workshops, and collaborative programmes in the multipurpose hall, designed to accommodate up to 80 participants. Facilities such as sound systems, projectors, microphones, Wi-Fi, and seating arrangements are available as add-ons.
-                    </div>
                 </div>
                 <?php endif; ?>
                 <?php if (intval($staircase_type->is_hidden) !== 1): ?>
                 <div class="bt-tour-item">
-                    <button class="bt-tour-btn <?php echo $default_type->id === $staircase_type->id ? 'active' : ''; ?>" data-type-id="<?php echo esc_attr($staircase_type->id); ?>" data-category="staircase">
+                    <button class="bt-tour-btn <?php echo $default_type->id === $staircase_type->id ? 'active' : ''; ?>" data-type-id="<?php echo esc_attr($staircase_type->id); ?>" data-category="staircase" data-description="<?php echo esc_attr('Ideal for intimate screenings or presentations in the staircase gallery adjacent to the library area. With a laser projector and surround sound system, the space offers an immersive setting ideal for focused viewing and thoughtful gatherings.'); ?>">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
                             <path d="M3 21h4v-4h4v-4h4v-4h6"></path>
                             <path d="M3 7h4v4H3z"></path>
                         </svg>
                         <span>Screening Zone</span>
                     </button>
-                    <div class="bt-tour-description">Ideal for intimate screenings or presentations in the staircase gallery adjacent to the library area. With a laser projector and surround sound system, the space offers an immersive setting ideal for focused viewing and thoughtful gatherings.</div>
                 </div>
                 <?php endif; ?>
                 <?php if (intval($individual_type->is_hidden) !== 1): ?>
                 <div class="bt-tour-item">
-                    <button class="bt-tour-btn <?php echo $default_type->id === $individual_type->id ? 'active' : ''; ?>" data-type-id="<?php echo esc_attr($individual_type->id); ?>" data-category="individual_tour">
+                    <button class="bt-tour-btn <?php echo $default_type->id === $individual_type->id ? 'active' : ''; ?>" data-type-id="<?php echo esc_attr($individual_type->id); ?>" data-category="individual_tour" data-description="<?php echo esc_attr('Experience the exhibitions at your own pace through a self-guided visit. Secure your ticket and enjoy the freedom to discover the Knowledge Hub - exploring each space as long or as briefly as you like.'); ?>">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
                             <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
                             <circle cx="12" cy="7" r="4"></circle>
                         </svg>
                         <span>Individual Tour</span>
                     </button>
-                    <div class="bt-tour-description">Experience the exhibitions at your own pace through a self-guided visit. Secure your ticket and enjoy the freedom to discover the Knowledge Hub - exploring each space as long or as briefly as you like.</div>
                 </div>
                 <?php endif; ?>
                 <?php if (intval($event_type->is_hidden) !== 1): ?>
                 <div class="bt-tour-item">
-                    <button class="bt-tour-btn <?php echo $default_type->id === $event_type->id ? 'active' : ''; ?>" data-type-id="<?php echo esc_attr($event_type->id); ?>" data-category="event_tour">
+                    <button class="bt-tour-btn <?php echo $default_type->id === $event_type->id ? 'active' : ''; ?>" data-type-id="<?php echo esc_attr($event_type->id); ?>" data-category="event_tour" data-description="<?php echo esc_attr('Journey through the exhibitions with a Knowledge Hub guide, offering insight, context, and deeper stories behind the works. Each guide leads up to five visitors, with additional guides arranged for larger groups.'); ?>">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
                             <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
                             <circle cx="9" cy="7" r="4"></circle>
@@ -2740,10 +2736,10 @@ class BookingTour {
                         </svg>
                         <span>Guided Tour</span>
                     </button>
-                    <div class="bt-tour-description">Journey through the exhibitions with a Knowledge Hub guide, offering insight, context, and deeper stories behind the works. Each guide leads up to five visitors, with additional guides arranged for larger groups.</div>
                 </div>
                 <?php endif; ?>
             </div>
+            <div class="bt-tour-active-description" id="bt-tour-active-description"></div>
 
             <input type="hidden" id="bt-type-id" value="<?php echo esc_attr($default_type->id); ?>">
             <input type="hidden" id="bt-type-category" value="<?php echo esc_attr($default_type->type_category); ?>">

@@ -96,6 +96,15 @@
     color: var(--bt-text-muted);
 }
 
+.bt-tour-active-description {
+    max-width: 720px;
+    margin: -28px auto 40px;
+    text-align: center;
+    font-size: 15px;
+    line-height: 1.7;
+    color: var(--bt-text-muted);
+}
+
 .bt-tour-btn {
     display: inline-flex;
     align-items: center;
