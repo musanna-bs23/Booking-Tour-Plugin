@@ -44,6 +44,9 @@ jQuery(document).ready(function($) {
     $('#bt-report-pdf').on('click', function() {
         generateReport('pdf');
     });
+    $('#bt-report-xlsx').on('click', function() {
+        generateReport('xlsx');
+    });
 
     // Type settings form
     $('#bt-type-settings-form').on('submit', function(e) {

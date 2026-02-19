@@ -458,6 +458,9 @@ class BookingTour {
                 <button class="button bt-filter-btn" id="bt-report-pdf">
                     Generate Report (PDF)
                 </button>
+                <button class="button bt-filter-btn" id="bt-report-xlsx">
+                    Generate Report (XLSX)
+                </button>
             </div>
 
             <div class="bt-bookings-card">
@@ -2467,6 +2470,19 @@ class BookingTour {
             $params[] = $end_date;
         }
 
+        if ($format === 'xlsx') {
+            $excel_sql = "SELECT t.name AS type_name, b.booking_date, b.customer_name, b.customer_phone, b.customer_email, b.total_price
+                          FROM {$wpdb->prefix}bt_bookings b
+                          INNER JOIN {$wpdb->prefix}bt_booking_types t ON t.id = b.booking_type_id
+                          WHERE $where
+                          ORDER BY b.booking_date DESC, b.id DESC
+                          LIMIT 1000";
+            $excel_rows = empty($params) ? $wpdb->get_results($excel_sql, ARRAY_A) : $wpdb->get_results($wpdb->prepare($excel_sql, $params), ARRAY_A);
+            $filename_base = 'booking-tour-report-' . date('Ymd-His');
+            $this->output_excel_report($excel_rows, $filename_base . '.xlsx');
+            exit;
+        }
+
         $type_category_sql = $this->get_type_category_sql();
         $joins = $this->get_type_joins_sql();
         $sql = "SELECT b.id, b.booking_type_id, b.booking_date, b.slot_ids, b.cluster_hours, b.cluster_time_ranges, b.ticket_count, b.total_price,
@@ -2535,6 +2551,123 @@ class BookingTour {
         header('Content-Disposition: attachment; filename="' . $filename_base . '.doc"');
         echo $html;
         exit;
+    }
+
+    private function output_excel_report($rows, $filename) {
+        if (!class_exists('ZipArchive')) {
+            wp_die('XLSX export requires ZipArchive to be enabled on the server.');
+        }
+
+        $headers = array(
+            'Book Type',
+            'Date',
+            'Customer Name',
+            'Customer Phone Number',
+            'Email',
+            'Total Amount'
+        );
+
+        $sheet_xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
+        $sheet_xml .= '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">';
+        $sheet_xml .= '<sheetData>';
+
+        $sheet_xml .= '<row r="1">';
+        foreach ($headers as $idx => $header) {
+            $cell_ref = $this->excel_cell_ref($idx + 1, 1);
+            $sheet_xml .= '<c r="' . $cell_ref . '" t="inlineStr"><is><t>' . $this->xml_escape($header) . '</t></is></c>';
+        }
+        $sheet_xml .= '</row>';
+
+        $row_number = 2;
+        foreach ($rows as $row) {
+            $sheet_xml .= '<row r="' . $row_number . '">';
+            $values = array(
+                isset($row['type_name']) ? $row['type_name'] : '',
+                isset($row['booking_date']) ? $row['booking_date'] : '',
+                isset($row['customer_name']) ? $row['customer_name'] : '',
+                isset($row['customer_phone']) ? $row['customer_phone'] : '',
+                isset($row['customer_email']) ? $row['customer_email'] : ''
+            );
+            foreach ($values as $col_idx => $value) {
+                $cell_ref = $this->excel_cell_ref($col_idx + 1, $row_number);
+                $sheet_xml .= '<c r="' . $cell_ref . '" t="inlineStr"><is><t>' . $this->xml_escape($value) . '</t></is></c>';
+            }
+            $total_ref = $this->excel_cell_ref(6, $row_number);
+            $total_val = isset($row['total_price']) ? floatval($row['total_price']) : 0;
+            $sheet_xml .= '<c r="' . $total_ref . '" t="n"><v>' . number_format($total_val, 2, '.', '') . '</v></c>';
+            $sheet_xml .= '</row>';
+            $row_number++;
+        }
+        $sheet_xml .= '</sheetData></worksheet>';
+
+        $content_types = '<?xml version="1.0" encoding="UTF-8"?>'
+            . '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+            . '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+            . '<Default Extension="xml" ContentType="application/xml"/>'
+            . '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+            . '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+            . '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>'
+            . '</Types>';
+
+        $rels = '<?xml version="1.0" encoding="UTF-8"?>'
+            . '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            . '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>'
+            . '</Relationships>';
+
+        $workbook = '<?xml version="1.0" encoding="UTF-8"?>'
+            . '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+            . '<sheets><sheet name="Bookings" sheetId="1" r:id="rId1"/></sheets>'
+            . '</workbook>';
+
+        $workbook_rels = '<?xml version="1.0" encoding="UTF-8"?>'
+            . '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            . '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'
+            . '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'
+            . '</Relationships>';
+
+        $styles = '<?xml version="1.0" encoding="UTF-8"?>'
+            . '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+            . '<fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts>'
+            . '<fills count="1"><fill><patternFill patternType="none"/></fill></fills>'
+            . '<borders count="1"><border/></borders>'
+            . '<cellStyleXfs count="1"><xf/></cellStyleXfs>'
+            . '<cellXfs count="1"><xf/></cellXfs>'
+            . '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>'
+            . '</styleSheet>';
+
+        $tmp_file = tempnam(sys_get_temp_dir(), 'bt_xlsx_');
+        $zip = new ZipArchive();
+        if ($zip->open($tmp_file, ZipArchive::OVERWRITE) !== true) {
+            wp_die('Unable to generate XLSX file.');
+        }
+        $zip->addFromString('[Content_Types].xml', $content_types);
+        $zip->addFromString('_rels/.rels', $rels);
+        $zip->addFromString('xl/workbook.xml', $workbook);
+        $zip->addFromString('xl/_rels/workbook.xml.rels', $workbook_rels);
+        $zip->addFromString('xl/styles.xml', $styles);
+        $zip->addFromString('xl/worksheets/sheet1.xml', $sheet_xml);
+        $zip->close();
+
+        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        header('Content-Length: ' . filesize($tmp_file));
+        readfile($tmp_file);
+        @unlink($tmp_file);
+    }
+
+    private function excel_cell_ref($col, $row) {
+        $letters = '';
+        $col = intval($col);
+        while ($col > 0) {
+            $mod = ($col - 1) % 26;
+            $letters = chr(65 + $mod) . $letters;
+            $col = intval(($col - 1) / 26);
+        }
+        return $letters . intval($row);
+    }
+
+    private function xml_escape($value) {
+        return htmlspecialchars((string) $value, ENT_QUOTES | ENT_XML1, 'UTF-8');
     }
 
     private function build_report_html($bookings, $slot_map, $addons_map, $filters) {
