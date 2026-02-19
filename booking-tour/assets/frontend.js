@@ -747,6 +747,11 @@ jQuery(document).ready(function($) {
         let showSummary = false;
         let totalPrice = 0;
         let addonsTotal = 0;
+
+        if (category !== 'hall') {
+            $('#bt-summary-addons').empty();
+            $('#bt-selected-addons').val('{}');
+        }
         
         if (isHallCategory(category) && selectedDate && selectedSlots.length > 0) {
             showSummary = true;
@@ -803,6 +808,11 @@ jQuery(document).ready(function($) {
         } else {
             $('#bt-summary').stop(true, true).slideUp(200);
             $('#bt-form-section').stop(true, true).slideUp(200);
+            $('#bt-summary-content').empty();
+            $('#bt-summary-addons').empty();
+            $('#bt-summary-total').empty();
+            $('#bt-total-price').val(0);
+            $('#bt-selected-addons').val('{}');
         }
 
         toggleAddonsSection();
@@ -829,10 +839,15 @@ jQuery(document).ready(function($) {
         $('#bt-selected-date').val('');
         $('#bt-selected-slots').val('');
         $('#bt-selected-addons').val('{}');
+        $('#bt-total-price').val(0);
+        $('#bt-ticket-count').val(ticketCount);
         $('#bt-addons-list').empty();
         $('#bt-addons-section').stop(true, true).hide();
         $('#bt-summary').stop(true, true).hide();
         $('#bt-form-section').stop(true, true).hide();
+        $('#bt-summary-content').empty();
+        $('#bt-summary-addons').empty();
+        $('#bt-summary-total').empty();
     }
 
     function toggleSections() {
