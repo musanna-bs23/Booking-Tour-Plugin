@@ -926,30 +926,38 @@
     position: fixed;
     inset: 0;
     z-index: 100000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
 }
 
 .bt-hour-modal-overlay {
     position: absolute;
     inset: 0;
-    background: rgba(0, 0, 0, 0.45);
+    background: rgba(17, 24, 39, 0.48);
+    backdrop-filter: blur(4px);
 }
 
 .bt-hour-modal-content {
     position: relative;
-    width: min(420px, calc(100vw - 32px));
-    margin: 10vh auto 0;
-    background: #fff;
-    border-radius: 14px;
-    border: 1px solid var(--bt-border);
-    padding: 22px 20px 18px;
-    box-shadow: 0 20px 60px rgba(17, 24, 39, 0.18);
+    width: min(460px, calc(100vw - 32px));
+    margin: 0;
+    background: linear-gradient(180deg, #ffffff 0%, #fcfcfd 100%);
+    border-radius: 20px;
+    border: 1px solid #eceef2;
+    padding: 28px 26px 24px;
+    box-shadow: 0 24px 70px rgba(17, 24, 39, 0.26);
+    animation: btHourModalEnter 0.22s ease-out;
 }
 
 .bt-hour-modal-title {
-    margin: 0 0 14px;
-    font-size: 16px;
+    margin: 0 0 18px;
+    font-size: 24px;
     font-weight: 700;
     color: var(--bt-text);
+    letter-spacing: -0.02em;
+    text-align: center;
 }
 
 .bt-hour-modal-hint {
@@ -958,10 +966,70 @@
     color: var(--bt-text-muted);
 }
 
+.bt-hour-modal-content .bt-ticket-controls {
+    justify-content: center;
+    gap: 22px;
+    margin: 4px 0 0;
+}
+
+.bt-hour-modal-content .bt-ticket-btn {
+    width: 56px;
+    height: 56px;
+    border-radius: 14px;
+    border-width: 1px !important;
+    border-color: #d8dce4 !important;
+    color: var(--bt-brand) !important;
+    background: #ffffff !important;
+    font-size: 26px;
+    box-shadow: 0 4px 10px rgba(17, 24, 39, 0.08);
+}
+
+.bt-hour-modal-content .bt-ticket-btn:hover {
+    background: #fff7f2 !important;
+    border-color: var(--bt-brand) !important;
+    color: var(--bt-brand) !important;
+    transform: translateY(-1px);
+}
+
+.bt-hour-modal-content .bt-ticket-count {
+    min-width: 76px;
+    padding: 8px 14px;
+    border-radius: 12px;
+    background: #f8fafc;
+    border: 1px solid #e5e7eb;
+    font-size: 30px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+}
+
 .bt-hour-modal-actions {
-    margin-top: 16px;
+    margin-top: 22px;
     display: flex;
-    justify-content: flex-end;
+    justify-content: center;
+}
+
+#bt-hour-modal-ok {
+    width: 100%;
+    border-radius: 14px;
+    padding: 14px 18px;
+    font-size: 17px;
+    font-weight: 700;
+    box-shadow: 0 10px 22px rgba(138, 69, 39, 0.28);
+}
+
+#bt-hour-modal-ok:hover:not(:disabled) {
+    transform: translateY(-1px);
+}
+
+@keyframes btHourModalEnter {
+    from {
+        transform: translateY(10px) scale(0.985);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0) scale(1);
+        opacity: 1;
+    }
 }
 
 /* Form Section */
@@ -1058,6 +1126,7 @@
     height: 100%;
     opacity: 0;
     cursor: pointer;
+    z-index: 1;
 }
 
 .bt-file-label {
@@ -1081,6 +1150,30 @@
 .bt-file-upload:hover .bt-file-label {
     border-color: var(--bt-brand);
     background: rgba(138, 69, 39, 0.02);
+}
+
+.bt-file-clear {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 26px;
+    height: 26px;
+    border: 1px solid var(--bt-border);
+    border-radius: 50%;
+    background: #fff;
+    color: var(--bt-text-muted);
+    cursor: pointer;
+    font-size: 18px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2;
+}
+
+.bt-file-clear:hover {
+    border-color: var(--bt-brand);
+    color: var(--bt-brand);
 }
 
 /* Submit Button */

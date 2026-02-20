@@ -3102,6 +3102,7 @@ class BookingTour {
                                 </svg>
                                 <span>Choose file (max 1MB)</span>
                             </div>
+                            <button type="button" class="bt-file-clear" id="bt-clear-payment-image" aria-label="Remove selected image" style="display:none;">&times;</button>
                         </div>
                     </div>
                     <div class="bt-form-group bt-full">

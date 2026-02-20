@@ -610,6 +610,59 @@
     cursor: default;
 }
 
+/* Pagination */
+.bt-pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 18px 20px 20px;
+    border-top: 1px solid var(--bt-border);
+    background: linear-gradient(180deg, #ffffff 0%, #fafafa 100%);
+}
+
+.bt-pagination-controls {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.bt-page-btn {
+    min-width: 38px;
+    height: 38px;
+    padding: 0 12px;
+    border: 1px solid #d8dee8;
+    background: #ffffff;
+    color: #4b5563;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+
+.bt-page-btn:hover {
+    border-color: var(--bt-brand);
+    color: var(--bt-brand);
+    background: #fffaf7;
+    transform: translateY(-1px);
+}
+
+.bt-page-btn.active {
+    border-color: var(--bt-brand);
+    background: var(--bt-brand);
+    color: #ffffff;
+    box-shadow: 0 8px 18px rgba(138, 69, 39, 0.22);
+}
+
+.bt-page-btn:focus-visible {
+    outline: 2px solid rgba(138, 69, 39, 0.25);
+    outline-offset: 2px;
+}
+
 /* Tour Settings Grid Fix */
 .bt-tour-settings-form .bt-input-row {
     display: grid;

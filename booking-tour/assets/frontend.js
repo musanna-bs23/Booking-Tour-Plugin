@@ -1,4 +1,5 @@
 jQuery(document).ready(function($) {
+    const defaultFileLabelText = 'Choose file (max 1MB)';
     // Check if booking container exists
     if (!$('.bt-booking-container').length) return;
     
@@ -41,6 +42,7 @@ jQuery(document).ready(function($) {
 
     // Tour type selection
     $('.bt-tour-btn').on('click', function() {
+        clearPendingFormState();
         $('.bt-tour-btn').removeClass('active');
         $(this).addClass('active');
         updateActiveTourDescription();
@@ -476,11 +478,18 @@ jQuery(document).ready(function($) {
 
         $('#bt-calendar-days').off('click', '.bt-day').on('click', '.bt-day', function() {
             if ($(this).hasClass('bt-day-disabled')) return;
+            const nextDateStr = $(this).data('date');
+            const previousDateStr = selectedDate ? formatDate(selectedDate) : '';
+            const isDateChanged = !previousDateStr || previousDateStr !== nextDateStr;
             
             $('.bt-day').removeClass('bt-day-selected');
             $(this).addClass('bt-day-selected');
             
-            selectedDate = new Date($(this).data('date') + 'T00:00:00');
+            if (isDateChanged) {
+                clearPendingFormState();
+            }
+
+            selectedDate = new Date(nextDateStr + 'T00:00:00');
             selectedSlots = [];
             ticketCount = getMinTicketCount(typeData.type_category);
             eventClusterHours = [1];
@@ -821,13 +830,26 @@ jQuery(document).ready(function($) {
     function resetForm() {
         resetSelectionState();
         $('#bt-booking-form')[0].reset();
-        $('.bt-file-label span').text('Choose file (max 1MB)');
+        resetPaymentImageInput();
         toggleSections();
         updateUI();
         renderCalendar();
         if (isHallCategory(typeData.type_category)) renderSlots();
         else renderTourInfo();
         loadTypeData($('#bt-type-id').val());
+    }
+
+    function clearPendingFormState() {
+        $('#bt-name').val('');
+        $('#bt-phone').val('');
+        $('#bt-email').val('');
+        $('#bt-transaction-id').val('');
+        $('#bt-notes').val('');
+        $('#bt-agree-terms').prop('checked', false);
+        selectedAddons = {};
+        $('#bt-selected-addons').val('{}');
+        resetPaymentImageInput();
+        $('#bt-toast').removeClass('bt-toast-show');
     }
 
     function resetSelectionState() {
@@ -957,10 +979,30 @@ jQuery(document).ready(function($) {
         $('#bt-addons-list').html(html);
     }
 
-    // File upload label
+    function resetPaymentImageInput() {
+        $('#bt-payment-image').val('');
+        $('.bt-file-label span').text(defaultFileLabelText);
+        $('#bt-clear-payment-image').hide();
+    }
+
+    // File upload label + instant size validation
     $('#bt-payment-image').on('change', function() {
-        const fileName = this.files[0] ? this.files[0].name : 'Choose file (max 1MB)';
-        $('.bt-file-label span').text(fileName);
+        const file = this.files && this.files[0] ? this.files[0] : null;
+        if (!file) {
+            resetPaymentImageInput();
+            return;
+        }
+        if (file.size > btFrontend.maxUploadSize) {
+            showToast('Payment image must be less than 1MB', 'error');
+            resetPaymentImageInput();
+            return;
+        }
+        $('.bt-file-label span').text(file.name);
+        $('#bt-clear-payment-image').show();
+    });
+
+    $('#bt-clear-payment-image').on('click', function() {
+        resetPaymentImageInput();
     });
 
     // Helper functions
