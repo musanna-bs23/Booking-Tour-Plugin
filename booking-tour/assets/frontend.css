@@ -897,7 +897,14 @@
     border: 1px solid var(--bt-border) !important;
     background: #fff !important;
     cursor: pointer;
-    font-weight: 700;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    line-height: 1 !important;
+    padding: 0 !important;
+    font-weight: 700 !important;
+    font-size: 18px !important;
+    color: var(--bt-brand) !important;
 }
 
 .bt-addon-disabled {
