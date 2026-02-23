@@ -776,7 +776,7 @@
 }
 
 .bt-summary-total strong {
-    color: var(--bt-brand);
+    color: var(--bt-brand) !important;
     font-size: 24px;
     font-weight: 700;
 }
@@ -791,16 +791,16 @@
     display: flex;
     justify-content: space-between;
     font-size: 13px;
-    color: var(--bt-text-muted);
+    color: var(--bt-text-muted) !important;
     margin-bottom: 6px;
 }
 
 .bt-addons-section {
     margin-top: 24px;
     padding: 20px;
-    border: 1px solid var(--bt-border);
+    border: 1px solid var(--bt-border) !important;
     border-radius: 14px;
-    background: #fff;
+    background: #fff !important;
 }
 
 .bt-addons-row {
@@ -813,14 +813,14 @@
 .bt-addons-hint {
     margin: 0;
     font-size: 14px;
-    color: var(--bt-text-muted);
+    color: var(--bt-text-muted) !important;
 }
 
 .bt-addons-btn {
     padding: 10px 16px;
     border-radius: 10px;
-    border: 1px solid var(--bt-border);
-    background: #fff;
+    border: 1px solid var(--bt-border) !important;
+    background: #fff !important;
     cursor: pointer;
     font-weight: 600;
 }
@@ -828,7 +828,7 @@
 .bt-addons-selected {
     margin-top: 12px;
     font-size: 14px;
-    color: var(--bt-text);
+    color: var(--bt-text) !important;
 }
 
 .bt-addons-selected .bt-addon-chip {
@@ -837,8 +837,8 @@
     gap: 6px;
     padding: 6px 10px;
     border-radius: 999px;
-    background: var(--bt-bg);
-    border: 1px solid var(--bt-border);
+    background: var(--bt-bg) !important;
+    border: 1px solid var(--bt-border) !important;
     margin: 4px 6px 0 0;
     font-size: 12px;
 }
@@ -857,7 +857,7 @@
     justify-content: space-between;
     align-items: center;
     padding: 12px 14px;
-    border: 1px solid var(--bt-border);
+    border: 1px solid var(--bt-border) !important;
     border-radius: 12px;
     background: #fff;
 }
@@ -870,17 +870,17 @@
 
 .bt-addon-name {
     font-weight: 600;
-    color: var(--bt-text);
+    color: var(--bt-text) !important;
 }
 
 .bt-addon-meta {
     font-size: 12px;
-    color: var(--bt-text-muted);
+    color: var(--bt-text-muted) !important;
 }
 
 .bt-addon-controls {
     display: inline-flex;
-    align-items: center;
+    align-items: center !important;
     gap: 8px;
 }
 
@@ -894,8 +894,8 @@
     width: 28px;
     height: 28px;
     border-radius: 8px;
-    border: 1px solid var(--bt-border);
-    background: #fff;
+    border: 1px solid var(--bt-border) !important;
+    background: #fff !important;
     cursor: pointer;
     font-weight: 700;
 }
@@ -907,15 +907,15 @@
 
 .bt-modal-footer {
     padding: 16px 24px 20px;
-    border-top: 1px solid var(--bt-border);
+    border-top: 1px solid var(--bt-border) !important;
     display: flex;
     justify-content: flex-end;
 }
 
 .bt-addons-apply {
-    background: var(--bt-brand);
-    border: 1px solid var(--bt-brand);
-    color: #fff;
+    background: var(--bt-brand) !important;
+    border: 1px solid var(--bt-brand) !important;
+    color: #fff !important;
     padding: 10px 18px;
     border-radius: 10px;
     font-weight: 600;
@@ -935,7 +935,7 @@
 .bt-hour-modal-overlay {
     position: absolute;
     inset: 0;
-    background: rgba(17, 24, 39, 0.48);
+    background: rgba(17, 24, 39, 0.48) !important;
     backdrop-filter: blur(4px);
 }
 
@@ -943,9 +943,9 @@
     position: relative;
     width: min(460px, calc(100vw - 32px));
     margin: 0;
-    background: linear-gradient(180deg, #ffffff 0%, #fcfcfd 100%);
+    background: linear-gradient(180deg, #ffffff 0%, #fcfcfd 100%) !important;
     border-radius: 20px;
-    border: 1px solid #eceef2;
+    border: 1px solid #eceef2 !important;
     padding: 28px 26px 24px;
     box-shadow: 0 24px 70px rgba(17, 24, 39, 0.26);
     animation: btHourModalEnter 0.22s ease-out;
